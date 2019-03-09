@@ -1,0 +1,53 @@
+import argparse
+import os
+from os import path
+from sys import stderr
+
+from tbxi.lowlevel import MAGIC
+from tbxi.prcldump import dump
+
+
+parser = argparse.ArgumentParser(description='''
+    Dump a MacOS parcel blob (magic number 0x7072636C 'prcl') to a
+    plain-text Parcelfile and several decompressed binaries. This output
+    can be rebuilt using the Parcel Compiler (prclc). Usually parcel
+    blobs are found embedded inside a file called "Mac OS ROM", although
+    the Blue Box uses them in isolation. As a convenience this utility
+    will search for the magic number inside any input file (with a
+    warning).
+''')
+
+parser.add_argument('source', nargs=1, help='file to be decompiled')
+
+meg = parser.add_mutually_exclusive_group()
+meg.add_argument('-d', metavar='dest-dir', help='output directory (Parcelfile will be created within)')
+meg.add_argument('-f', metavar='dest-file', help='output file (binaries will go in parent directory)')
+
+args = parser.parse_args()
+
+with open(args.source[0], 'rb') as f:
+    binary = f.read()
+
+if not binary.startswith(MAGIC):
+    try:
+        offset = binary.index(MAGIC)
+    except ValueError:
+        print('Not a parcels file', file=stderr)
+        exit(1)
+    else:
+        print('Warning: parcel blob wrapped at offset 0x%x' % offset)
+        binary = binary[offset:]
+
+if args.f:
+    dest_file = path.abspath(args.f)
+    dest_dir = path.dirname(dest_file)
+elif args.d:
+    dest_dir = path.abspath(args.d)
+    dest_file = path.join(dest_dir, 'Parcelfile')
+else:
+    dest_dir = path.abspath(args.source[0].rstrip(path.sep) + '-dump')
+    dest_file = path.join(dest_dir, 'Parcelfile')
+
+os.makedirs(dest_dir, exist_ok=True)
+
+dump(binary, dest_file, dest_dir)

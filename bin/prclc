@@ -1,0 +1,24 @@
+import argparse
+import os
+from os import path
+from sys import stderr
+
+from tbxi.prclc import compile
+
+
+parser = argparse.ArgumentParser(description='''
+    Parcel blob compiler
+''')
+
+parser.add_argument('source', nargs='?', default=os.getcwd(), help='Parcelfile or directory')
+parser.add_argument('-o', metavar='dest-file', default='MacOSROM', help='output file (default: MacOSROM)')
+
+args = parser.parse_args()
+
+if path.isdir(args.source):
+    args.source = path.join(args.source, 'Parcelfile')
+
+result = compile(args.source)
+
+with open(args.o, 'wb') as f:
+    f.write(result)
