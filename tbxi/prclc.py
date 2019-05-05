@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from shlex import split
 from os import path
 import struct
