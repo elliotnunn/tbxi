@@ -56,22 +56,11 @@ def decompress(lzss):
     return bytes(plain)
 
 
-def compress(plain):
-    global have_warned_about_slowness
-
-    if not have_warned_about_slowness:
-        have_warned_about_slowness = True
-        warn('Using slow pure-Python LZSS compression')
-
-    if not plain: return b''
-
-    # Init the variables that get shared with the two closures below
-    lchild = [0] * (N + 1)
-    rchild = [0] * (N + 257); memset(rchild, N + 1, N + 256 + 1, NIL)
-    parent = [0] * (N + 1); memset(parent, 0, N, NIL)
-    text_buf = bytearray(N + F - 1); memset(text_buf, 0, N - F, ord(' '))
-    match_length = match_position = 0
-
+class Tree:
+    def __init__(self):
+        self.lchild = [0] * (N + 1)
+        self.rchild = [0] * (N + 257); memset(self.rchild, N + 1, N + 256 + 1, NIL)
+        self.parent = [0] * (N + 1); memset(self.parent, 0, N, NIL)
 
     # Inserts string of length F, text_buf[r..r+F-1], into one of the trees
     # (text_buf[r]'th tree) and returns the longest-match position and length
@@ -79,8 +68,8 @@ def compress(plain):
     # If match_length = F, then removes the old node in favor of the new one,
     # because the old one will be deleted sooner. Note r plays double role,
     # as tree node and position in buffer.
-    def insert_node(r):
-        nonlocal lchild, rchild, parent, text_buf, match_length, match_position
+    def insert_node(self, r, text_buf):
+        lchild, rchild, parent = self.lchild, self.rchild, self.parent
 
         cmp = 1
         key = text_buf[r:]
@@ -88,6 +77,7 @@ def compress(plain):
         rchild[r] = lchild[r] = NIL
 
         match_length = 0
+        match_position = 0
 
         while 1:
             if cmp >= 0:
@@ -96,14 +86,14 @@ def compress(plain):
                 else:
                     rchild[p] = r
                     parent[r] = p
-                    return
+                    return match_position, match_length
             else:
                 if lchild[p] != NIL:
                     p = lchild[p]
                 else:
                     lchild[p] = r
                     parent[r] = p
-                    return
+                    return match_position, match_length
 
             i = 1
             while i < F:
@@ -129,10 +119,11 @@ def compress(plain):
 
         parent[p] = NIL;
 
+        return match_position, match_length
 
     # deletes node p from tree
-    def delete_node(p):
-        nonlocal lchild, rchild, parent
+    def delete_node(self, p):
+        lchild, rchild, parent = self.lchild, self.rchild, self.parent
 
         if parent[p] == NIL: return
 
@@ -165,6 +156,20 @@ def compress(plain):
         parent[p] = NIL
 
 
+def compress(plain):
+    global have_warned_about_slowness
+
+    if not have_warned_about_slowness:
+        have_warned_about_slowness = True
+        warn('Using slow pure-Python LZSS compression')
+
+    if not plain: return b''
+
+    # Init the variables that get shared with the two closures below
+    tree = Tree()
+    text_buf = bytearray(N + F - 1); memset(text_buf, 0, N - F, ord(' '))
+    match_length = match_position = 0
+
     # End of function defs, now onto the main attraction
     plain_len = len(plain)
     plain_i = 0
@@ -191,11 +196,11 @@ def compress(plain):
     # 'space' characters.  Note the order in which these strings are
     # inserted.  This way, degenerate trees will be less likely to occur.
     for i in range(1, F+1):
-        insert_node(r - i)
+        tree.insert_node(r - i, text_buf)
 
     # Finally, insert the whole string just read.
     # The global variables match_length and match_position are set.
-    insert_node(r)
+    match_position, match_length = tree.insert_node(r, text_buf)
     while 1:
         match_length = min(match_length, tblen)
 
@@ -222,7 +227,7 @@ def compress(plain):
         last_match_length = match_length
         i = 0
         while i < last_match_length and plain_i < plain_len:
-            delete_node(s) # Delete old strings and
+            tree.delete_node(s) # Delete old strings and
             c = plain[plain_i]; plain_i += 1
             text_buf[s] = c # read new bytes
 
@@ -236,12 +241,12 @@ def compress(plain):
             r = (r + 1) % N
 
             # Register the string in text_buf[r..r+F-1]
-            insert_node(r)
+            match_position, match_length = tree.insert_node(r, text_buf)
 
             i += 1
 
         while i < last_match_length:
-            delete_node(s)
+            tree.delete_node(s)
 
             # After the end of text, no need to read,
             s = (s + 1) % N
@@ -250,7 +255,7 @@ def compress(plain):
             # but buffer may not be empty.
             tblen -= 1
             if tblen:
-                insert_node(r)
+                match_position, match_length = tree.insert_node(r, text_buf)
 
             i += 1
 
