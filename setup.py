@@ -29,5 +29,3 @@ try:
 except (SystemExit, Exception):
     setup_args.pop('ext_modules')
     setup(**setup_args)
-else:
-    exit()
