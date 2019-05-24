@@ -15,8 +15,9 @@ setup_args = dict(
         'Topic :: Software Development :: Build Tools',
         'License :: OSI Approved :: MIT License',
     ],
+    zip_safe=True,
     packages=['tbxi'],
-    scripts=['bin/prclc', 'bin/prcldump'],
+    entry_points=dict(console_scripts=['tbxi = tbxi.__main__:main']),
     ext_modules=[Extension('tbxi.fast_lzss', ['speedups/fast_lzss.c'])],
 )
 
@@ -27,5 +28,6 @@ setup_args = dict(
 try:
     setup(**setup_args)
 except (SystemExit, Exception):
+    raise
     setup_args.pop('ext_modules')
     setup(**setup_args)

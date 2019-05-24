@@ -10,6 +10,9 @@ try:
 except ImportError:
     from .slow_lzss import compress
 
+from . import dispatcher
+
+
 class CodeLine(dict):
     def __getattr__(self, attrname):
         return self[attrname]
@@ -56,42 +59,10 @@ def getbool(from_str):
 class PdslParseError(Exception):
     pass
 
-def load_and_cache_path(from_path):
-    # No compression, easy
-    if not from_path.lower().endswith('.lzss'):
-        with open(from_path, 'rb') as f:
-            return f.read()
-
-    # Compression, first try to read cached file
-    try:
-        f = open(from_path, 'rb')
-    except FileNotFoundError:
-        pass
-    else:
-        try:
-            orig_t = path.getmtime(from_path[:-5])
-        except FileNotFoundError:
-            orig_t = None
-
-        if orig_t is None or orig_t < path.getmtime(from_path):
-            data = f.read()
-            f.close()
-            return data
-
-    # Compression, no valid cached file available
-    with open(from_path[:-5], 'rb') as f:
-        data = compress(f.read())
-
-    with open(from_path, 'wb') as f:
-        f.write(data)
-
-    return data
-
-def compile(src):
-    parent = path.dirname(path.abspath(src))
+def build(src):
     node_list = []
 
-    with open(src) as f:
+    with open(path.join(src, 'Parcelfile')) as f:
         try:
             for line_num, line in enumerate(f, start=1):
                 level = get_indent_level(line)
@@ -117,10 +88,14 @@ def compile(src):
                         if not path.isabs(new.src): # look rel to Parcelfile
                             new.src = path.join(path.dirname(src), new.src)
 
-                        if new.src.lower().endswith('.lzss'):
+                        a, b = path.splitext(new.src)
+                        if b.lower() == '.lzss':
+                            new.src = a
                             new.compress = 'lzss'
 
-                        new.data = load_and_cache_path(new.src)
+                        new.data = dispatcher.build(new.src)
+                        if new.compress == 'lzss':
+                            new.data = compress(new.data)
 
                     node_list[-1].children.append(new)
 

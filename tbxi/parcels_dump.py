@@ -4,7 +4,9 @@ from os import path
 from shlex import quote
 import struct
 
-from .lzss import decompress
+from . import dispatcher
+
+from .slow_lzss import decompress
 from .lowlevel import PrclNodeStruct, PrclChildStruct
 
 def walk_tree(binary):
@@ -12,9 +14,6 @@ def walk_tree(binary):
 
     e.g. [(prclnodetuple, [prclchildtuple, ...]), ...]
     """
-
-    if not binary.startswith(b'prcl'):
-        raise ValueError('binary does not start with magic number')
 
     prclnode = None
 
@@ -41,7 +40,7 @@ def suggest_names_to_dump(parent, child, code_name):
     # We yield heaps of suggested filenames, and the shortest non-empty unique one gets chosen
 
     if parent.ostype == child.ostype == 'rom ':
-        yield 'ROM'
+        yield 'MacROM'
         return
 
     if 'AAPL,MacOS,PowerPC' in child.name and code_name == 'PowerMgrPlugin':
@@ -112,9 +111,14 @@ def settle_name_votes(vote_dict):
     return decision
 
 
-def dump(binary, dest, dest_dir):
-    if path.isdir(dest) or dest.endswith(os.sep):
-        dest = path.join(dest, 'Parcelfile')
+def is_parcels(binary):
+    return binary.startswith(b'prcl')
+
+
+def dump(binary, dest_dir):
+    if not binary.startswith(b'prcl'): raise dispatcher.WrongFormat
+
+    os.makedirs(dest_dir, exist_ok=True)
 
     basic_structure = walk_tree(binary)
 
@@ -145,6 +149,8 @@ def dump(binary, dest, dest_dir):
         for prclchild in children:
             if prclchild.ostype in ('cstr', 'csta'): continue
             votes = suggest_names_to_dump(prclnode, prclchild, code_name)
+            if unpacked_dict[unique_binary_tpl(prclchild)].startswith(b'Joy!'):
+                votes = [v + '.pef' for v in votes]
             name_vote_dict[unique_binary_tpl(prclchild)].extend(votes)
 
     # Decide on filenames
@@ -152,11 +158,14 @@ def dump(binary, dest, dest_dir):
 
     # Dump blobs to disk
     for tpl, filename in decision.items():
-        with open(path.join(dest_dir, filename), 'wb') as f:
-            f.write(unpacked_dict[tpl])
+        keep_this = True
+
+        data = unpacked_dict[tpl]
+        dispatcher.dump(data, path.join(dest_dir, filename))
+
 
     # Get printing!!!
-    with open(dest, 'w') as f:
+    with open(path.join(dest_dir, 'Parcelfile'), 'w') as f:
         for prclnode, children in basic_structure:
             line = quote(prclnode.ostype)
             line += ' flags=0x%05x' % prclnode.flags
@@ -173,7 +182,7 @@ def dump(binary, dest, dest_dir):
                 if prclchild.ostype not in ('cstr', 'csta'):
                     filename = decision[unique_binary_tpl(prclchild)]
                     if prclchild.compress == 'lzss': filename += '.lzss'
-                    line += ' src=%s' % quote(path.relpath(path.join(dest_dir, filename), path.dirname(dest)))
+                    line += ' src=%s' % filename
 
                 if binary_counts[unique_binary_tpl(prclchild)] > 1:
                     line += ' deduplicate=1'
