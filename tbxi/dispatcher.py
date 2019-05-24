@@ -54,8 +54,8 @@ def build_path(p):
         # Does the filename match?
         if sib.name.startswith(name) and 'patch' in sib.name[len(name):]:
             # This is a bit unsafe, so prompt the user (to pipe in `yes`...)
-            if input('Apply %s to %s? [y/N]' % (sib.name, name)).lower().startswith('y'):
-                result = run([sib.path], cwd=parent, stdin=data, stdout=PIPE, check=True)
+            if input('Apply %s to %s? [y/N] ' % (sib.name, name)).lower().startswith('y'):
+                result = run([sib.path], cwd=parent, input=data, stdout=PIPE, check=True)
                 data = result.stdout
 
     return data
