@@ -28,6 +28,5 @@ setup_args = dict(
 try:
     setup(**setup_args)
 except (SystemExit, Exception):
-    raise
     setup_args.pop('ext_modules')
     setup(**setup_args)

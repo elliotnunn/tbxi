@@ -60,6 +60,7 @@ class PdslParseError(Exception):
     pass
 
 def build(src):
+    if not path.exists(path.join(src, 'Parcelfile')): raise dispatcher.WrongFormat
     node_list = []
 
     with open(path.join(src, 'Parcelfile')) as f:
@@ -86,24 +87,28 @@ def build(src):
 
                     if new.src:
                         if not path.isabs(new.src): # look rel to Parcelfile
-                            new.src = path.join(path.dirname(src), new.src)
+                            new.src = path.join(src, new.src)
 
                         a, b = path.splitext(new.src)
                         if b.lower() == '.lzss':
                             new.src = a
                             new.compress = 'lzss'
 
-                        new.data = dispatcher.build(new.src)
+                        new.data = dispatcher.build_path(new.src)
+                        new.unpackedlen = len(new.data)
                         if new.compress == 'lzss':
                             new.data = compress(new.data)
+                        new.packedlen = len(new.data)
 
                     node_list[-1].children.append(new)
 
                 elif level == 2:
                     # some C strings to add to the data
-                    assert not node_list[-1].children[-1].src
+                    child = node_list[-1].children[-1]
+                    assert not child.src
                     for x in pieces:
-                        node_list[-1].children[-1].data.extend(x.encode('mac_roman') + b'\0')
+                        child.data.extend(x.encode('mac_roman') + b'\0')
+                        child.packedlen = child.unpackedlen = len(child.data)
 
         except:
             raise PdslParseError('Line %d' % line_num)
@@ -118,6 +123,7 @@ def build(src):
     accum.extend(bytes(4))
 
     dedup_dict = {}
+    cksum_history = set() # dedup pointers get a checksum when they shouldn't
 
     for node in node_list:
         # Link previous member to this one
@@ -131,25 +137,19 @@ def build(src):
         for child in node.children:
             child.data = bytes(child.data) # no more mutability
 
-            dedup_tpl = (child.compress, child.data)
-
-            child.unpackedlen = len(child.data)
-
-            if child.deduplicate and dedup_tpl in dedup_dict:
-                child.ptr, child.packedlen = dedup_dict[dedup_tpl]
+            if child.deduplicate and child.data in dedup_dict:
+                child.ptr = dedup_dict[child.data]
                 continue
 
             child.ptr = len(accum)
 
             accum.extend(child.data)
 
-            child.packedlen = len(accum) - child.ptr
-
             while len(accum) % 4 != 0:
                 accum.append(0x99) # this is the only place we pad
 
             if child.deduplicate:
-                dedup_dict[dedup_tpl] = (child.ptr, child.packedlen)
+                dedup_dict[child.data] = child.ptr
 
         PrclNodeStruct.pack_into(accum, hdr_ptr,
             link=0, ostype=node.ostype, hdr_size=hdr_size, flags=node.flags,
@@ -160,9 +160,10 @@ def build(src):
         pack_ptr = hdr_ptr + PrclNodeStruct.size
 
         for child in node.children:
-            if child.flags & 4:
+            if child.flags & 4 or child.ptr in cksum_history:
                 data = accum[child.ptr:child.ptr+child.packedlen]
                 child.cksum = crc32(data)
+                cksum_history.add(child.ptr)
             else:
                 child.cksum = 0
 

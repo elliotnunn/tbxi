@@ -72,7 +72,7 @@ def dump(binary, dest_path, toplevel=False):
         mod = importlib.import_module('..%s_dump' % fmt, __name__)
         try:
             mod.dump(binary, dest_path)
-            did_dump = True
+            print(fmt)
             break
         except WrongFormat:
             pass
