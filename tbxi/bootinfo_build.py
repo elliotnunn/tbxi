@@ -2,6 +2,11 @@ from os import path
 import re
 import zlib
 
+try:
+    from .fast_lzss import compress
+except ImportError:
+    from .slow_lzss import compress
+
 from . import dispatcher
 
 
@@ -47,13 +52,16 @@ def build(src):
         constants[base + '-offset'] = len(booter)
         for attempt in ['MacROM', 'Parcels']:
             try:
-                booter.extend(dispatcher.build_path(path.join(src, attempt)))
+                data = dispatcher.build_path(path.join(src, attempt))
             except:
                 pass
             else:
                 break
         else:
             raise FileNotFoundError
+
+        if not data.startswith(b'prcl'): data = compress(data)
+        booter.extend(data)
 
         constants[base + '-size'] = len(booter) - constants[base + '-offset']
 
