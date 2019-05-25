@@ -41,7 +41,7 @@ def main(args=None):
     parser = argparse.ArgumentParser(prog='tbxi ' + command, description=descriptions[command])
 
     if command == 'dump':
-        parser.add_argument('file', metavar='<input-file>', help='original file (dest: <input-file>.src')
+        parser.add_argument('file', metavar='<input-file>', help='original file')
         parser.add_argument('-o', dest='output', metavar='<output-file>', help='destination (default: <input-file>.src)')
         args = parser.parse_args(args)
 
