@@ -1,7 +1,7 @@
 from .lowlevel import SuperMarioHeader, ConfigInfo
 
 import struct
-
+import shlex
 import os
 from os import path
 
@@ -22,7 +22,7 @@ Mac68KROMSize=                      # [38] Number of bytes in Macintosh 68K ROM
 ExceptionTableOffset=               # [3C] Offset of base of PowerPC Exception Table Code
 ExceptionTableSize=                 # [40] Number of bytes in PowerPC Exception Table Code
 
-HWInitCodeOffset=                   # Offset of base of Hardware Init Code
+HWInitCodeOffset=                   # [44] Offset of base of Hardware Init Code
 HWInitCodeSize=                     # [48] Number of bytes in Hardware Init Code
 
 KernelCodeOffset=                   # [4C] Offset of base of NanoKernel Code
@@ -124,7 +124,7 @@ def dump_configinfo(binary, offset, push_line):
             if key == 'InterruptHandlerKind':
                 value = '0x%02X' % raw_value
             elif key == 'BootstrapVersion':
-                value = repr(raw_value)[1:]
+                value = shlex.quote(raw_value.decode('mac_roman'))
             elif key.endswith('Offset') and key.startswith(('Mac68KROM', 'ExceptionTable', 'HWInitCode', 'KernelCode', 'EmulatorCode', 'OpcodeTable', 'OpenFWBundle')):
                 if getattr(s, key.replace('Offset', 'Size')) == 0:
                     value = '0x00000000'
@@ -201,6 +201,7 @@ def dump_configinfo(binary, offset, push_line):
                 attr_s = 'PMDT_InvalidAddress'
             elif attr == 0xA01:
                 attr_s = 'PMDT_Available'
+            # elif attr & 
             else:
                 attr_s = '0x%03X' % attr
 
@@ -214,7 +215,7 @@ def dump_configinfo(binary, offset, push_line):
             if i == s.PageMapKDPOffset: push_line('special_pmdt=kdp')
             if i == s.PageMapEDPOffset: push_line('special_pmdt=edp')
 
-            push_line('pmdt_page_offset=0x%04X pages_minus_1=0x%04X phys_page=%s attr=%s' % (pgidx, pgcnt, paddr_s, attr_s))
+            push_line('\tpmdt_page_offset=0x%04X pages_minus_1=0x%04X phys_page=%s attr=%s' % (pgidx, pgcnt, paddr_s, attr_s))
 
     push_line('')
 
@@ -237,17 +238,22 @@ def dump_configinfo(binary, offset, push_line):
             vp = u & 1
 
             brpn = l >> 17
-            wimg = [(l > 6) & 1, (l > 5) & 1, (l > 4) & 1, (l > 3) & 1]
-            pp = [(l > 1) & 1, l & 1]
+            unk23 = (l >> 8) & 1
+            wim = (l >> 4) & 0x7
+            ks = (l >> 3) & 1
+            ku = (l >> 2) & 1
+            pp = l & 0x3
 
-            bl_s = '0b' + bin(bl)[2:].zfill(11)
+            bl_s = '0b' + bin(bl)[2:].zfill(6)
+            wim_s = bin(wim)[2:].zfill(3)
+            pp_s = bin(pp)[2:].zfill(2)
 
             if is_relative:
                 brpn_s = 'BASE+0x%06X' % (brpn << 17)
             else:
                 brpn_s = '0x%08X' % (brpn << 17)
 
-            push_line('bepi=0x%08X bl=%s vs=%s vp=%d brpn=%s wimg=0b%d%d%d%d pp=0b%d%d' % (bepi << 17, bl_s, vs, vp, brpn_s, *wimg, *pp))
+            push_line('\tbepi=0x%08X bl_128k=%s vs=%d vp=%d brpn=%s unk23=%d wim=0b%s ks=%d ku=%d pp=0b%s' % (bepi << 17, bl_s, vs, vp, brpn_s, unk23, wim_s, ks, ku, pp_s))
 
     push_line('')
 

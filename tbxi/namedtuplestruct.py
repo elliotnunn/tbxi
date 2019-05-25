@@ -6,6 +6,7 @@ class NamedTupleStruct(struct.Struct):
 
     def __init__(self, *args, name=None, fields=None, **kwargs):
         self.__namedtuple = namedtuple(name, fields)
+        self._fields = self.__namedtuple._fields
         super().__init__(*args, **kwargs)
 
     def __tuplify(self, *args, **kwargs):
