@@ -2,6 +2,8 @@ import os
 from os import path
 import re
 
+from .slow_lzss import decompress
+
 from . import dispatcher
 
 

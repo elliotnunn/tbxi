@@ -22,6 +22,8 @@ def build(src):
     except (NotADirectoryError, FileNotFoundError):
         raise dispatcher.WrongFormat
 
+    has_checksum = (b'adler32' in booter)
+
     constants = dict()
     constant_spans = dict()
     for m in re.finditer(rb'h#\s+([A-Fa-f0-9]+)\s+constant\s+([-\w]+)', booter):
@@ -72,6 +74,6 @@ def build(src):
         assert start + len(insert) == stop
         booter[start:stop] = insert
 
-    append_checksum(booter)
+    if has_checksum: append_checksum(booter)
 
     return bytes(booter)
