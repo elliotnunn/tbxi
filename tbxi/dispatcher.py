@@ -51,7 +51,7 @@ def build_path(p):
     # try building the file from a directory
     for np in [p + '.src', p]:
         try:
-            data = build_dir(p)
+            data = build_dir(np)
         except WrongFormat:
             pass
         else:

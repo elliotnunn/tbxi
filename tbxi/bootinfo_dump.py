@@ -24,8 +24,9 @@ def dump(binary, dest_dir):
         val = int(m.group(1), 16)
         constants[key] = val
 
-        for i in range(*m.span(1)):
-            chrp_boot_zeroed[i:i+1] = b'0'
+        if key != 'elf-offset':
+            for i in range(*m.span(1)):
+                chrp_boot_zeroed[i:i+1] = b'0'
 
     with open(path.join(dest_dir, 'Bootscript'), 'wb') as f:
         f.write(chrp_boot_zeroed)
