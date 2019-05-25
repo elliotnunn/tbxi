@@ -53,21 +53,20 @@ def parse_configinfo(src_path):
     linelist = []
     chunks = {'': linelist} # must sort as first
 
-    with open(src_path) as f:
-        for line in f:
-            words = shlex.split(line, comments=True, posix=True)
-            if len(words) == 0: continue
+    for line in dispatcher.build_path(src_path).decode('utf8').split('\n'):
+        words = shlex.split(line, comments=True, posix=True)
+        if len(words) == 0: continue
 
-            if len(words) == 1 and words[0].startswith('[') and words[0].endswith(']'):
-                linelist = []
-                chunks[words[0][1:-1]] = linelist
-                continue
+        if len(words) == 1 and words[0].startswith('[') and words[0].endswith(']'):
+            linelist = []
+            chunks[words[0][1:-1]] = linelist
+            continue
 
-            worddict = CodeLine()
-            linelist.append(worddict)
-            for word in words:
-                k, sep, v = word.partition('=')
-                if sep: worddict[k] = v
+        worddict = CodeLine()
+        linelist.append(worddict)
+        for word in words:
+            k, sep, v = word.partition('=')
+            if sep: worddict[k] = v
 
     # do some cleanup: replace all instances of BASE with ROMImageBaseOffset
     base = '-0x30C000' # bad fallback, don't skip ROMImageBaseOffset
@@ -132,6 +131,8 @@ def checksum_image(binary, ofs):
 def build(src):
     if not path.exists(path.join(src, 'Configfile')) or path.exists(path.join(src, 'Configfile-1')): raise dispatcher.WrongFormat
 
+    print('powerpc', src)
+
     cilist = []
     for ciname in iter_configinfo_names():
         try:
@@ -143,8 +144,7 @@ def build(src):
 
     # This will typically contain the emulator, which I can't reliably extract
     try:
-        with open(path.join(src, 'EverythingElse'), 'rb') as f:
-            rom = bytearray(f.read())
+        rom = bytearray(dispatcher.build_path(path.join(src, 'EverythingElse')))
     except FileNotFoundError:
         rom = bytearray(0x400000)
 

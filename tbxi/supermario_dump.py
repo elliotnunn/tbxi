@@ -50,6 +50,7 @@ def is_supermario(binary):
 
 
 def extract_decldata(binary):
+    print(hex(binary.rfind(PAD) + len(PAD)))
     return binary[binary.rfind(PAD) + len(PAD):]
 
 
@@ -99,63 +100,62 @@ def dump(binary, dest_dir):
 
     os.makedirs(dest_dir, exist_ok=True)
 
-    header = SuperMarioHeader.unpack_from(binary)
+    with open(path.join(dest_dir, 'Romfile'), 'w') as f:
+        print(HEADER_COMMENT +  '\n', file=f)
+        print('rom_size=%s\n' % hex(len(binary)), file=f)
 
-    main_code = clean_maincode(binary[:header.RomRsrc])
-    with open(path.join(dest_dir, 'MainCode'), 'wb') as f:
-        f.write(main_code)
+        header = SuperMarioHeader.unpack_from(binary)
 
-    decldata = extract_decldata(binary)
-    with open(path.join(dest_dir, 'DeclData'), 'wb') as f:
-        f.write(decldata)
+        main_code = clean_maincode(binary[:header.RomRsrc])
+        dispatcher.dump(main_code, path.join(dest_dir, 'MainCode'))
 
-    # now for the tricky bit: resources :(
-    f = open(path.join(dest_dir, 'Rsrcfile'), 'w')
-    print(HEADER_COMMENT +  '\n', file=f)
+        decldata = extract_decldata(binary)
+        if decldata:
+            dispatcher.dump(decldata, path.join(dest_dir, 'DeclData'))
 
-    unavail_filenames = set(['', '.pef'])
+        # now for the tricky bit: resources :(
+        unavail_filenames = set(['', '.pef'])
 
-    for i, offset in enumerate(extract_resource_offsets(binary)):
-        rsrc_dir = path.join(dest_dir, 'Rsrc')
-        os.makedirs(rsrc_dir, exist_ok=True)
+        for i, offset in enumerate(extract_resource_offsets(binary)):
+            rsrc_dir = path.join(dest_dir, 'Rsrc')
+            os.makedirs(rsrc_dir, exist_ok=True)
 
-        entry = ResEntry.unpack_from(binary, offset)
-        mmhead = FakeMMHeader.unpack_from(binary, entry.offsetToData - FakeMMHeader.size)
+            entry = ResEntry.unpack_from(binary, offset)
+            mmhead = FakeMMHeader.unpack_from(binary, entry.offsetToData - FakeMMHeader.size)
 
-        # assert entry.
-        assert mmhead.MagicKurt == b'Kurt'
-        assert mmhead.MagicC0A00000 == 0xC0A00000
-        
-        data = binary[entry.offsetToData:][:mmhead.dataSizePlus12 - 12]
-        report_combo_field = COMBO_FIELDS.get(entry.combo, '0b' + bin(entry.combo >> 56)[2:].zfill(8))
+            # assert entry.
+            assert mmhead.MagicKurt == b'Kurt'
+            assert mmhead.MagicC0A00000 == 0xC0A00000
+            
+            data = binary[entry.offsetToData:][:mmhead.dataSizePlus12 - 12]
+            report_combo_field = COMBO_FIELDS.get(entry.combo, '0b' + bin(entry.combo >> 56)[2:].zfill(8))
 
-        # create a friendly ascii filename for the resource
-        filename = '%s_%d' % (sanitize_macroman(entry.rsrcType), entry.rsrcID)
-        if len(entry.rsrcName) > 0 and entry.rsrcName != b'Main': # uninformative artifact of rom build
-            filename += '_' + sanitize_macroman(entry.rsrcName)
-        if report_combo_field != 'AllCombos':
-            filename += '_' + report_combo_field.replace('AppleTalk', 'AT')
-        filename = filename.strip('_')
-        while '__' in filename: filename = filename.replace('__', '_')
-        if data.startswith(b'Joy!peff'): filename += '.pef'
-        while filename in unavail_filenames: filename = '_' + filename
+            # create a friendly ascii filename for the resource
+            filename = '%s_%d' % (sanitize_macroman(entry.rsrcType), entry.rsrcID)
+            if len(entry.rsrcName) > 0 and entry.rsrcName != b'Main': # uninformative artifact of rom build
+                filename += '_' + sanitize_macroman(entry.rsrcName)
+            if report_combo_field != 'AllCombos':
+                filename += '_' + report_combo_field.replace('AppleTalk', 'AT')
+            filename = filename.strip('_')
+            while '__' in filename: filename = filename.replace('__', '_')
+            if data.startswith(b'Joy!peff'): filename += '.pef'
+            while filename in unavail_filenames: filename = '_' + filename
 
-        unavail_filenames.add(filename)
+            unavail_filenames.add(filename)
 
-        with open(path.join(rsrc_dir, filename), 'wb') as f2:
-            f2.write(data)
+            with open(path.join(rsrc_dir, filename), 'wb') as f2:
+                f2.write(data)
 
-        filename = path.join('Rsrc', filename)
+            filename = path.join('Rsrc', filename)
 
-        # Now, just need to dream up a data format
-        report = ''
-        report = ljustspc(report + 'type=' + quodec(entry.rsrcType), 12)
-        report = ljustspc(report + 'id=' + str(entry.rsrcID), 24)
-        report = ljustspc(report + 'name=' + quodec(entry.rsrcName), 48)
-        report = ljustspc(report + 'src=' + shlex.quote(filename), 84)
-        if report_combo_field != 'AllCombos':
-            report = ljustspc(report + 'combo=' + report_combo_field, 0)
-        report = report.rstrip()
+            # Now, just need to dream up a data format
+            report = ''
+            report = ljustspc(report + 'type=' + quodec(entry.rsrcType), 12)
+            report = ljustspc(report + 'id=' + str(entry.rsrcID), 24)
+            report = ljustspc(report + 'name=' + quodec(entry.rsrcName), 48)
+            report = ljustspc(report + 'src=' + shlex.quote(filename), 84)
+            if report_combo_field != 'AllCombos':
+                report = ljustspc(report + 'combo=' + report_combo_field, 0)
+            report = report.rstrip()
 
-        print(report, file=f)
-
+            print(report, file=f)
