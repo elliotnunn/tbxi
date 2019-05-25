@@ -232,10 +232,11 @@ def build(src):
         insert_and_assert(flat, lowmem, ptr)
         fields['MacLowMemInitOffset'] = ptr
 
-        ptr -= len(pagemap)
-        insert_and_assert(flat, pagemap, ptr)
-        fields['PageMapInitOffset'] = ptr
-        fields['PageMapInitSize'] = len(pagemap)
+        if len(pagemap) > 0:
+            ptr -= len(pagemap)
+            insert_and_assert(flat, pagemap, ptr)
+            fields['PageMapInitOffset'] = ptr
+            fields['PageMapInitSize'] = len(pagemap)
 
         insert_and_assert(flat, ConfigInfo.pack(**fields), 0)
 
