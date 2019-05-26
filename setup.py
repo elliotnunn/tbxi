@@ -5,7 +5,7 @@ setup_args = dict(
     version='0.1',
     author='Elliot Nunn',
     author_email='elliotnunn@fastmail.com',
-    description='Tools to compile and inspect Mac OS 8/9 NewWorld ROM images',
+    description='Tools to compile and inspect Macintosh ROM images',
     url='https://github.com/elliotnunn/tbxi',
     classifiers=[
         'Programming Language :: Python :: 3 :: Only',
