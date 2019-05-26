@@ -16,10 +16,11 @@ def main(args=None):
     if args is None: args = sys.argv[1:]
 
     descriptions = {
-        'dump': '''Break a ROM file into rebuildable parts. Any OldWorld
-        or NewWorld image can be processed. Because successive ROM
-        formats tended to wrap layers around old ones, up to four layers
-        can require 'unpeeling'.''',
+        'dump': '''Break a ROM file into rebuildable parts. Any ROM
+        released since the 660AV/840AV ("SuperMario") can be processed,
+        including NewWorld ROMs. Because successive ROM formats tended
+        to wrap layers around old ones, the image is dumped
+        recursively.''',
         'build': '''Recreate a dumped ROM file. With minor exceptions,
         the result should be identical to the original.'''
     }
