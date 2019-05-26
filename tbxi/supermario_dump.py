@@ -50,7 +50,6 @@ def is_supermario(binary):
 
 
 def extract_decldata(binary):
-    print(hex(binary.rfind(PAD) + len(PAD)))
     return binary[binary.rfind(PAD) + len(PAD):]
 
 
