@@ -42,7 +42,7 @@ def build(src):
         booter.extend(b'\0' * (constants['elf-offset'] - len(booter)))
 
         constants['elf-offset'] = len(booter)
-        booter.extend(dispatcher.build_path(path.join(src, 'MacOS.elf')))
+        booter.extend(dispatcher.build(path.join(src, 'MacOS.elf')))
         constants['elf-size'] = len(booter) - constants['elf-offset']
 
     if 'lzss-offset' in constants:
@@ -54,7 +54,7 @@ def build(src):
         constants[base + '-offset'] = len(booter)
         for attempt in ['MacROM', 'Parcels']:
             try:
-                data = dispatcher.build_path(path.join(src, attempt))
+                data = dispatcher.build(path.join(src, attempt))
             except:
                 pass
             else:

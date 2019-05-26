@@ -53,7 +53,7 @@ def parse_configinfo(src_path):
     linelist = []
     chunks = {'': linelist} # must sort as first
 
-    for line in dispatcher.build_path(src_path).decode('utf8').split('\n'):
+    for line in dispatcher.build(src_path).decode('utf8').split('\n'):
         words = shlex.split(line, comments=True, posix=True)
         if len(words) == 0: continue
 
@@ -144,7 +144,7 @@ def build(src):
 
     # This will typically contain the emulator, which I can't reliably extract
     try:
-        rom = bytearray(dispatcher.build_path(path.join(src, 'EverythingElse')))
+        rom = bytearray(dispatcher.build(path.join(src, 'EverythingElse')))
     except FileNotFoundError:
         rom = bytearray(0x400000)
 
@@ -260,7 +260,7 @@ def build(src):
             matches = glob.glob(glob.escape(path.join(src, filename)) + '*')
             if matches:
                 match = min(matches) # try for * before *.src
-                blob = dispatcher.build_path(match)
+                blob = dispatcher.build(match)
                 insert_and_assert(rom, blob, configinfo_offset + blob_offset)
 
     # let's do a cheeky checksum!

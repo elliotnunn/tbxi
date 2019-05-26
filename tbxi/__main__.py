@@ -61,7 +61,7 @@ def main(args=None):
         args = parser.parse_args(args)
 
         with open(args.output, 'wb') as f:
-            f.write(dispatcher.build_path(args.dir))
+            f.write(dispatcher.build(args.dir))
 
 
 if __name__ == "__main__":

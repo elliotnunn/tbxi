@@ -94,7 +94,7 @@ def build(src):
                             new.src = a
                             new.compress = 'lzss'
 
-                        new.data = dispatcher.build_path(new.src)
+                        new.data = dispatcher.build(new.src)
                         new.unpackedlen = len(new.data)
                         if new.compress == 'lzss':
                             new.data = compress(new.data)

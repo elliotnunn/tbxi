@@ -44,7 +44,7 @@ def build_dir(p):
     raise WrongFormat
 
 
-def build_path(p):
+def build(p):
     parent = path.dirname(path.abspath(p))
     name = path.basename(path.abspath(p))
 

@@ -25,7 +25,7 @@ def checksum(binary):
 def build(src):
     if not path.exists(path.join(src, 'Romfile')): raise dispatcher.WrongFormat
 
-    romfile = dispatcher.build_path(path.join(src, 'Romfile')).decode('utf8').split('\n')
+    romfile = dispatcher.build(path.join(src, 'Romfile')).decode('utf8').split('\n')
 
     rsrc_list = []
     for l in romfile:
@@ -49,11 +49,11 @@ def build(src):
 
     rom = bytearray(b'kc' * (rom_size // 2))
 
-    maincode = dispatcher.build_path(path.join(src, 'MainCode'))
+    maincode = dispatcher.build(path.join(src, 'MainCode'))
     rom[:len(maincode)] = maincode
 
     try:
-        decldata = dispatcher.build_path(path.join(src, 'DeclData'))
+        decldata = dispatcher.build(path.join(src, 'DeclData'))
     except FileNotFoundError:
         pass
     else:
@@ -65,7 +65,7 @@ def build(src):
     bogus_off = 0x5C
 
     for r in rsrc_list:
-        data = dispatcher.build_path(path.join(src, r['src']))
+        data = dispatcher.build(path.join(src, r['src']))
 
         data_ptr = lowlevel.pad(free + 16, ALIGN)
         mm_ptr = data_ptr - 12
