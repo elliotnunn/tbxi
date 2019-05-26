@@ -22,7 +22,9 @@ def main(args=None):
         to wrap layers around old ones, the image is dumped
         recursively.''',
         'build': '''Recreate a dumped ROM file. With minor exceptions,
-        the result should be identical to the original.'''
+        the result should be identical to the original. A NewWorld
+        bootinfo file can be BinHex-encoded ('.hqx'), or have a '.idump'
+        file created alongside.'''
     }
 
     for key in list(descriptions):
@@ -58,11 +60,36 @@ def main(args=None):
 
     elif command == 'build':
         parser.add_argument('dir', metavar='<input-dir>', help='source directory')
-        parser.add_argument('-o', dest='output', metavar='<output-file>', help='destination (default: <input-dir>.build)')
+        parser.add_argument('-o', dest='output', metavar='<output-file>', help='destination (default: Mac OS ROM)')
         args = parser.parse_args(args)
 
+        if not args.output: args.output = 'Mac OS ROM'
+
+        data = dispatcher.build(args.dir)
+
+        if data.startswith(b'<CHRP-BOOT>'):
+            base, ext = path.splitext(args.output)
+            if ext.lower() == '.hqx':
+                import binhex
+
+                finfo = binhex.FInfo()
+                finfo.Creator = b'chrp'
+                finfo.Type = b'tbxi'
+                finfo.Flags = 0
+
+                bh = binhex.BinHex((path.basename(base), finfo, len(data), 0), args.output)
+                bh.write(data)
+                bh.write_rsrc(b'')
+                bh.close()
+
+                return # do not write the usual way
+
+            else:
+                with open(args.output + '.idump', 'wb') as f:
+                    f.write(b'tbxichrp')
+
         with open(args.output, 'wb') as f:
-            f.write(dispatcher.build(args.dir))
+            f.write(data)
 
 
 if __name__ == "__main__":
