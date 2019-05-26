@@ -10,22 +10,40 @@ from . import dispatcher
 
 PAD = b'kc' * 100
 
+HEADER_COMMENT = """
+Automated dump of the ConfigInfo page of a Power Mac ROM
+(at least one per ROM)
+
+The first section contains the simple structure fields. The [LowMemory]
+section instructs the kernel to set low-memory globals. The
+[PageMappingInfo] section lists parts of ConfigInfo that tell the kernel
+how to lay out the PowerPC page table. (Hint: lines not starting with a
+tab are pointers into an array). The [BatMappingInfo] section similarly
+tells the kernel how to lay out the Block Allocation Table registers.
+
+Fields encoding the offset of a ROM component are computed from the base
+of ConfigInfo, but for clarity are expressed here relative to the "BASE"
+of ROM. ConfigInfo itself will be placed at -ROMImageBaseOffset.
+"""
+
+HEADER_COMMENT = '\n'.join('# ' + l if l else '' for l in HEADER_COMMENT.strip().split('\n'))
+
 CONFIGINFO_TEMPLATE = """
-ROMImageBaseOffset=                 # [28] Offset of Base of total ROM image
+ROMImageBaseOffset=                 # [28] Offset of Base of total ROM image [./EverythingElse placed here]
 ROMImageSize=                       # [2C] Number of bytes in ROM image
 ROMImageVersion=                    # [30] ROM Version number for entire ROM
 
                                     #  ROM component Info (offsets are from base of ConfigInfo page)
-Mac68KROMOffset=                    # [34] Offset of base of Macintosh 68K ROM
+Mac68KROMOffset=                    # [34] Offset of base of Macintosh 68K ROM [./Mac68KROM placed here]
 Mac68KROMSize=                      # [38] Number of bytes in Macintosh 68K ROM
 
-ExceptionTableOffset=               # [3C] Offset of base of PowerPC Exception Table Code
+ExceptionTableOffset=               # [3C] Offset of base of PowerPC Exception Table Code [./ExceptionTable placed here]
 ExceptionTableSize=                 # [40] Number of bytes in PowerPC Exception Table Code
 
-HWInitCodeOffset=                   # [44] Offset of base of Hardware Init Code
+HWInitCodeOffset=                   # [44] Offset of base of Hardware Init Code [./HWInit placed here]
 HWInitCodeSize=                     # [48] Number of bytes in Hardware Init Code
 
-KernelCodeOffset=                   # [4C] Offset of base of NanoKernel Code
+KernelCodeOffset=                   # [4C] Offset of base of NanoKernel Code [./NanoKernel placed here]
 KernelCodeSize=                     # [50] Number of bytes in NanoKernel Code
 
 EmulatorCodeOffset=                 # [54] Offset of base of Emulator Code
@@ -67,7 +85,7 @@ SharedMemoryAddr=                   # [35C] physical address of Mac/Smurf shared
 
 PA_RelocatedLowMemInit=             # [360] physical address of RelocatedLowMem
 
-OpenFWBundleOffset=                 # [364] Offset of base of OpenFirmware PEF Bundle
+OpenFWBundleOffset=                 # [364] Offset of base of OpenFirmware PEF Bundle [./OpenFW placed here]
 OpenFWBundleSize=                   # [368] Number of bytes in OpenFirmware PEF Bundle
 
 LA_OpenFirmware=                    # [36C] logical address of Open Firmware
@@ -114,6 +132,8 @@ def find_configinfo(binary):
 
 def dump_configinfo(binary, offset, push_line):
     s = ConfigInfo.unpack_from(binary, offset)
+
+    push_line(HEADER_COMMENT + '\n')
 
     # First section (no [header]):
     # Raw key=value lines not resembling the struct in PCCInfoRecordsPriv.h
