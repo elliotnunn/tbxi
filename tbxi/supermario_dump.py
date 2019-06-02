@@ -114,6 +114,7 @@ def dump(binary, dest_dir):
 
         # now for the tricky bit: resources :(
         unavail_filenames = set(['', '.pef'])
+        types_where_Main_should_be_in_filename = set()
 
         for i, offset in enumerate(extract_resource_offsets(binary)):
             rsrc_dir = path.join(dest_dir, 'Rsrc')
@@ -129,9 +130,12 @@ def dump(binary, dest_dir):
             data = binary[entry.offsetToData:][:mmhead.dataSizePlus12 - 12]
             report_combo_field = COMBO_FIELDS.get(entry.combo, '0b' + bin(entry.combo >> 56)[2:].zfill(8))
 
+            if entry.rsrcName == b'%A5Init':
+                types_where_Main_should_be_in_filename.add(entry.rsrcType)
+
             # create a friendly ascii filename for the resource
             filename = '%s_%d' % (sanitize_macroman(entry.rsrcType), entry.rsrcID)
-            if len(entry.rsrcName) > 0 and entry.rsrcName != b'Main': # uninformative artifact of rom build
+            if entry.rsrcName != b'Main' or entry.rsrcType in types_where_Main_should_be_in_filename:
                 filename += '_' + sanitize_macroman(entry.rsrcName)
             if report_combo_field != 'AllCombos':
                 filename += '_' + report_combo_field.replace('AppleTalk', 'AT')
