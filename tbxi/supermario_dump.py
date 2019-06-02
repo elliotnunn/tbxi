@@ -113,7 +113,7 @@ def dump(binary, dest_dir):
             dispatcher.dump(decldata, path.join(dest_dir, 'DeclData'))
 
         # now for the tricky bit: resources :(
-        unavail_filenames = set(['', '.pef'])
+        unavail_filenames = set(['', '.pef', '.pict'])
         types_where_Main_should_be_in_filename = set()
 
         for i, offset in enumerate(extract_resource_offsets(binary)):
@@ -142,6 +142,7 @@ def dump(binary, dest_dir):
             filename = filename.strip('_')
             while '__' in filename: filename = filename.replace('__', '_')
             if data.startswith(b'Joy!peff'): filename += '.pef'
+            if entry.rsrcType == b'PICT': filename += '.pict'
             while filename in unavail_filenames: filename = '_' + filename
 
             unavail_filenames.add(filename)
