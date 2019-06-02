@@ -119,10 +119,19 @@ def find_configinfo(binary):
         allsums = b''.join(x.to_bytes(4, byteorder='big') for x in sum32)
         allsums += sum64.to_bytes(8, byteorder='big')
 
+        # if i == 0x30d000: # for figuring out pippin in future
+        #     print(*['%02X' % x for x in allsums])
+        #     print(*['%02X' % x for x in binary[i:i+len(allsums)]])
+
         if binary[i:i+len(allsums)] == allsums:
             break
     else:
-        return
+        # Hack for Pippin ROM, which has bad checksum
+        for i in range(0x300000, len(binary), 0x100):
+            if binary[i+0x64:].startswith(b'Boot '):
+                break
+        else:
+            return # failed!
 
     # Which structs share the BootstrapVersion signature?
     for j in range(0, len(binary), 0x100):
