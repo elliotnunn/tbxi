@@ -1,8 +1,5 @@
 import importlib
 
-from subprocess import run, PIPE
-
-import fnmatch
 import os
 from os import path
 
@@ -17,17 +14,6 @@ FORMATS = '''
 
 class WrongFormat(Exception):
     pass
-
-
-def strip_patch_name_ext(name):
-    # We need to match patch filenames to other filenames using fnmatch,
-    # but first we need to remove '.patch.sh' or '.patch' from the title
-
-    # If it isn't a patch, return None
-
-    for i in range(2):
-        name, ext = path.splitext(name)
-        if ext.lower() == '.patch': return name
 
 
 def build_dir(p):
@@ -60,27 +46,6 @@ def build(p):
         # fall back on just reading the file (boring, I know!)
         with open(p, 'rb') as f:
             data = f.read()
-
-    # Search the directory of the file for executable patches
-    for sib in sorted(os.scandir(parent), key=lambda ent: ent.name):
-        # Does the filename match?
-        pattern = strip_patch_name_ext(sib.name)
-        if pattern and fnmatch.fnmatch(name, pattern):
-            # This is a bit unsafe, so prompt the user (to pipe in `yes`...)
-            if input('Apply %s to %s? [y/N] ' % (sib.name, name)).lower().startswith('y'):
-                # The script is told the original filename, but it should READ FROM STDIN!
-                cmd = [sib.path, name]
-
-                # Run the script as a unixy filter
-                result = run(cmd, cwd=parent, input=data, stdout=PIPE)
-
-                # Return 0 to apply stdout, 1 to nop, anything else to fail
-                if result.returncode == 0:
-                    data = result.stdout
-                elif result.returncode == 1:
-                    pass
-                else:
-                    result.check_returncode()
 
     return data
 
