@@ -2,7 +2,7 @@ from setuptools import setup, Extension
 
 setup_args = dict(
     name='tbxi',
-    version='0.2',
+    version='0.3',
     author='Elliot Nunn',
     author_email='elliotnunn@fastmail.com',
     description='Tools to compile and inspect Macintosh ROM images',
