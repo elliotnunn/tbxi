@@ -77,7 +77,7 @@ def main(args=None):
                 finfo.Type = b'tbxi'
                 finfo.Flags = 0
 
-                bh = binhex.BinHex((path.basename(base), finfo, len(data), 0), args.output)
+                bh = binhex.BinHex(('Mac OS ROM', finfo, len(data), 0), args.output)
                 bh.write(data)
                 bh.write_rsrc(b'')
                 bh.close()
