@@ -3,7 +3,6 @@ import shlex
 import ast
 import re
 import struct
-import glob
 
 from .lowlevel import ConfigInfo
 
@@ -23,8 +22,6 @@ class CodeLine(dict):
 
 
 def iter_configinfo_names():
-    yield 'Configfile'
-
     n = 1
     while True:
         yield 'Configfile-%d' % n
@@ -50,10 +47,12 @@ def sub_constants(expr):
 
 
 def parse_configinfo(src_path):
+    filenames = {}
+
     linelist = []
     chunks = {'': linelist} # must sort as first
 
-    for line in dispatcher.build(src_path).decode('utf8').split('\n'):
+    for line in open(src_path):
         words = shlex.split(line, comments=True, posix=True)
         if len(words) == 0: continue
 
@@ -66,7 +65,13 @@ def parse_configinfo(src_path):
         linelist.append(worddict)
         for word in words:
             k, sep, v = word.partition('=')
-            if sep: worddict[k] = v
+            if sep:
+                v1, sep, v2 = v.partition('=') # the second = delimits a filename
+                if sep and k.endswith('Offset'):
+                    worddict[k] = v1
+                    filenames[k] = v2
+                else:
+                    worddict[k] = v
 
     # do some cleanup: replace all instances of BASE with ROMImageBaseOffset
     base = '-0x30C000' # bad fallback, don't skip ROMImageBaseOffset
@@ -97,13 +102,18 @@ def parse_configinfo(src_path):
                 if is_safe(v2):
                     words[k] = eval(v2)
 
-    return chunks
+    return chunks, filenames
 
 
 def insert_and_assert(binary, insertee, offset):
+    print(hex(offset))
+    new_len = offset + len(insertee)
+    binary.extend(b'\0' * (new_len - len(binary)))
+
     existing = binary[offset:offset+len(insertee)]
     if existing != insertee and any(existing):
-        raise ValueError('inserting over something else')
+        open('/tmp/elmo', 'wb').write(existing)
+        raise ValueError('inserting over something else @%X' % offset)
 
     binary[offset:offset+len(insertee)] = insertee
 
@@ -129,10 +139,6 @@ def checksum_image(binary, ofs):
 
 
 def build(src):
-    if not path.exists(path.join(src, 'Configfile')) or path.exists(path.join(src, 'Configfile-1')): raise dispatcher.WrongFormat
-
-    print('powerpc', src)
-
     cilist = []
     for ciname in iter_configinfo_names():
         try:
@@ -142,14 +148,11 @@ def build(src):
 
     if len(cilist) == 0: raise dispatcher.WrongFormat
 
-    # This will typically contain the emulator, which I can't reliably extract
-    try:
-        rom = bytearray(dispatcher.build(path.join(src, 'EverythingElse')))
-    except FileNotFoundError:
-        rom = bytearray(0x400000)
+    # Expand this as we go
+    rom = bytearray()
 
     # Now we go through every configinfo and insert it (oh hell)
-    for ci in reversed(cilist):
+    for ci, filenames in reversed(cilist):
         fields = {key: 0 for key in ConfigInfo._fields}
         lowmem = bytearray()
         pagemap = bytearray()
@@ -163,6 +166,11 @@ def build(src):
                     for k, v in words.items():
                         if k in fields:
                             fields[k] = v
+
+                            # The parallel filenames dict tells us what data to put at that address
+                            if k in filenames:
+                                blob = dispatcher.build(path.join(src, filenames[k]))
+                                insert_and_assert(rom, blob, v - fields['ROMImageBaseOffset'])
 
             elif header == 'LowMemory':
                 for words in lines:
@@ -244,24 +252,7 @@ def build(src):
         configinfo_offset = -fields['ROMImageBaseOffset'] # this var used below
         insert_and_assert(rom, flat, configinfo_offset)
 
-        # Now insert other things as directed by the struct
-        described = [
-            ('Mac68KROM', 'Mac68KROM'),
-            ('ExceptionTable', 'ExceptionTable'),
-            ('HWInitCode', 'HWInit'),
-            ('KernelCode', 'NanoKernel'),
-            ('OpenFWBundle', 'OpenFW'),
-        ]
-
-        for basename, filename in described:
-            blob_offset = fields[basename + 'Offset']
-            if blob_offset == 0: continue
-
-            matches = glob.glob(glob.escape(path.join(src, filename)) + '*')
-            if matches:
-                match = min(matches) # try for * before *.src
-                blob = dispatcher.build(match)
-                insert_and_assert(rom, blob, configinfo_offset + blob_offset)
+        rom.extend(b'\0' * (fields['ROMImageSize'] - len(rom)))
 
     # let's do a cheeky checksum!
     cksum = checksum_image(rom, configinfo_offset)

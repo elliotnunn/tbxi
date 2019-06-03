@@ -23,34 +23,35 @@ tells the kernel how to lay out the Block Allocation Table registers.
 
 Fields encoding the offset of a ROM component are computed from the base
 of ConfigInfo, but for clarity are expressed here relative to the "BASE"
-of ROM. ConfigInfo itself will be placed at -ROMImageBaseOffset.
+of ROM. If a second '=' is present, it indicates the name of a file to
+insert at this location.
 """
 
 HEADER_COMMENT = '\n'.join('# ' + l if l else '' for l in HEADER_COMMENT.strip().split('\n'))
 
 CONFIGINFO_TEMPLATE = """
-ROMImageBaseOffset=                 # [28] Offset of Base of total ROM image [./EverythingElse placed here]
-ROMImageSize=                       # [2C] Number of bytes in ROM image
-ROMImageVersion=                    # [30] ROM Version number for entire ROM
+ROMImageBaseOffset=                                 # [28] Offset of Base of total ROM image
+ROMImageSize=                                       # [2C] Number of bytes in ROM image
+ROMImageVersion=                                    # [30] ROM Version number for entire ROM
 
-                                    #  ROM component Info (offsets are from base of ConfigInfo page)
-Mac68KROMOffset=                    # [34] Offset of base of Macintosh 68K ROM [./Mac68KROM placed here]
-Mac68KROMSize=                      # [38] Number of bytes in Macintosh 68K ROM
+                                                    #  ROM component Info (offsets are from base of ConfigInfo page)
+Mac68KROMOffset=                                    # [34] Offset of base of Macintosh 68K ROM
+Mac68KROMSize=                                      # [38] Number of bytes in Macintosh 68K ROM
 
-ExceptionTableOffset=               # [3C] Offset of base of PowerPC Exception Table Code [./ExceptionTable placed here]
-ExceptionTableSize=                 # [40] Number of bytes in PowerPC Exception Table Code
+ExceptionTableOffset=                               # [3C] Offset of base of PowerPC Exception Table Code
+ExceptionTableSize=                                 # [40] Number of bytes in PowerPC Exception Table Code
 
-HWInitCodeOffset=                   # [44] Offset of base of Hardware Init Code [./HWInit placed here]
-HWInitCodeSize=                     # [48] Number of bytes in Hardware Init Code
+HWInitCodeOffset=                                   # [44] Offset of base of Hardware Init Code
+HWInitCodeSize=                                     # [48] Number of bytes in Hardware Init Code
 
-KernelCodeOffset=                   # [4C] Offset of base of NanoKernel Code [./NanoKernel placed here]
-KernelCodeSize=                     # [50] Number of bytes in NanoKernel Code
+KernelCodeOffset=                                   # [4C] Offset of base of NanoKernel Code
+KernelCodeSize=                                     # [50] Number of bytes in NanoKernel Code
 
-EmulatorCodeOffset=                 # [54] Offset of base of Emulator Code
-EmulatorCodeSize=                   # [58] Number of bytes in Emulator Code
+EmulatorCodeOffset=                                 # [54] Offset of base of Emulator Code
+EmulatorCodeSize=                                   # [58] Number of bytes in Emulator Code
 
-OpcodeTableOffset=                  # [5C] Offset of base of Opcode Table
-OpcodeTableSize=                    # [60] Number of bytes in Opcode Table
+OpcodeTableOffset=                                  # [5C] Offset of base of Opcode Table
+OpcodeTableSize=                                    # [60] Number of bytes in Opcode Table
 
                                     #  Offsets within the Emulator Data Page.
 BootstrapVersion=                   # [64] Bootstrap loader version info
@@ -85,8 +86,8 @@ SharedMemoryAddr=                   # [35C] physical address of Mac/Smurf shared
 
 PA_RelocatedLowMemInit=             # [360] physical address of RelocatedLowMem
 
-OpenFWBundleOffset=                 # [364] Offset of base of OpenFirmware PEF Bundle [./OpenFW placed here]
-OpenFWBundleSize=                   # [368] Number of bytes in OpenFirmware PEF Bundle
+OpenFWBundleOffset=                                 # [364] Offset of base of OpenFirmware PEF Bundle
+OpenFWBundleSize=                                   # [368] Number of bytes in OpenFirmware PEF Bundle
 
 LA_OpenFirmware=                    # [36C] logical address of Open Firmware
 PA_OpenFirmware=                    # [370] physical address of Open Firmware
@@ -139,7 +140,7 @@ def find_configinfo(binary):
             yield j
 
 
-def dump_configinfo(binary, offset, push_line):
+def dump_configinfo(binary, offset, filename_dict, push_line):
     s = ConfigInfo.unpack_from(binary, offset)
 
     push_line(HEADER_COMMENT + '\n')
@@ -164,8 +165,11 @@ def dump_configinfo(binary, offset, push_line):
 
             value = value.replace('0x-', '-0x').replace('0x+', '+0x')
 
+            if key in filename_dict:
+                value += '=' + shlex.quote(filename_dict[key])
+
             nuline = key + '=' + value
-            while remainder.startswith(' ') and len(nuline) + len(remainder) > len(line):
+            while remainder.startswith('  ') and len(nuline) + len(remainder) > len(line):
                 remainder = remainder[1:]
             nuline += remainder
             line = nuline
@@ -303,70 +307,61 @@ def get_nk_version(nk):
                 return 'v%02X.%02X' % (nk[i+2], nk[i+3]) # return the ???
 
 
-def extract_plausible_thing(binary, start):
-    stop = binary.find(bytes(1024), start) # check, because kernel is often absent or wrong size
-    if stop > start:
-        while stop % 4 != 0: stop += 1
-        return extract_and_zero(binary, start, stop)
-
-
-def dump(binary, dest_dir):
-    if not is_powerpc(binary): raise dispatcher.WrongFormat
+def dump(orig_binary, dest_dir):
+    if not is_powerpc(orig_binary): raise dispatcher.WrongFormat
 
     os.makedirs(dest_dir, exist_ok=True)
 
-    cioffsets = list(find_configinfo(binary))
-
     # We will zero out parts as we go along extracting them
-    binary = bytearray(binary)
+    binary = bytearray(orig_binary)
 
-    for i, cioffset in enumerate(cioffsets, 1):
-        filename = 'Configfile'
-        if len(cioffsets) > 1: filename += '-' + str(i)
+    ci_loc = []; ci_struct = [];
+    for i in list(find_configinfo(binary)):
+        ci_loc.append(i)
+        ci_struct.append(ConfigInfo.unpack_from(binary, i))
 
+        extract_and_zero(binary, i, i + 0x1000) # Keep it out of EverythingElse
+
+    fields = []
+    for field in ['Mac68KROM', 'ExceptionTable', 'HWInitCode', 'KernelCode', 'OpenFWBundle', 'ROMImageBase']:
+        start = ci_loc[0] + ci_struct[0]._asdict()[field + 'Offset']
+        if field == 'ROMImageBase': # This will contain everything not encompassed by 
+            stop = len(binary)
+        else:
+            stop = start + ci_struct[0]._asdict()[field + 'Size']
+
+        fields.append((start, stop, field))
+
+    # Special case: the "EverythingElse" gets searched for last (emulator not yet extractable)
+    fields = sorted(fields[:-1]) + fields[-1:]
+
+    filename_dict = {} # Maps 'KernelCode' etc to a filename
+    for start, stop, field in fields:
+        # ConfigInfo is known to lie about these fields
+        if field in 'HWInitCode KernelCode OpenFWBundle':
+            stop = binary.find(bytes(1024), start)
+
+        # Always grab a multiple of 4 bytes
+        while stop % 4 != 0: stop += 1
+
+        # Grab the fragment, and zero where it came from
+        fragment = extract_and_zero(binary, start, stop)
+
+        # Nothing to see here
+        if len(fragment) == 0 or not any(fragment): continue
+
+        filename = field.replace('Code', '').replace('Bundle', '').replace('Kern', 'NanoKern').replace('ROMImageBase', 'EverythingElse')
+        if field == 'KernelCode':
+            vers = get_nk_version(fragment)
+            if vers: filename += '-' + vers
+
+        filename_dict[field + 'Offset'] = filename
+
+        dispatcher.dump(fragment, path.join(dest_dir, filename))
+
+    # Finally, write out ConfigInfo with paths to the files that we create
+    for i, cioffset in enumerate(ci_loc, 1):
+        filename = 'Configfile-%d' % i
         with open(path.join(dest_dir, filename), 'w') as f:
             push_line = lambda x: print(x, file=f)
-            dump_configinfo(binary, cioffset, push_line)
-
-    best_cioffset = cioffsets[0]
-    best_ci = ConfigInfo.unpack_from(binary, best_cioffset)
-
-    for cioffset in cioffsets:
-        extract_and_zero(binary, cioffset, cioffset + 0x1000)
-
-    supermario = extract_and_zero(binary,
-        best_cioffset + best_ci.Mac68KROMOffset,
-        best_cioffset + best_ci.Mac68KROMOffset + best_ci.Mac68KROMSize)
-    dispatcher.dump(supermario, path.join(dest_dir, 'Mac68KROM'))
-
-    xtbl = extract_and_zero(binary,
-        best_cioffset + best_ci.ExceptionTableOffset,
-        best_cioffset + best_ci.ExceptionTableOffset + best_ci.ExceptionTableSize)
-    if any(xtbl):
-        # xtbl_len = len(xtbl)
-        # while not any(xtbl[xtbl_len-4:xtbl_len]): xtbl_len -= 4
-        # xtbl = xtbl[xtbl_len:]
-        with open(path.join(dest_dir, 'ExceptionTable'), 'wb') as f:
-            f.write(xtbl)
-
-    nk = extract_plausible_thing(binary, min(0x310000, best_cioffset + best_ci.KernelCodeOffset))
-    if nk:
-        name = 'NanoKernel'
-        vers = get_nk_version(nk)
-        if vers: name += '-' + vers
-
-        with open(path.join(dest_dir, name), 'wb') as f:
-            f.write(nk)
-
-    hwinit = extract_plausible_thing(binary, best_cioffset + best_ci.HWInitCodeOffset)
-    if hwinit:
-        with open(path.join(dest_dir, 'HWInit'), 'wb') as f:
-            f.write(hwinit)
-
-    openfw = extract_plausible_thing(binary, best_cioffset + best_ci.OpenFWBundleOffset)
-    if openfw:
-        with open(path.join(dest_dir, 'OpenFW'), 'wb') as f:
-            f.write(openfw)
-
-    with open(path.join(dest_dir, 'EverythingElse'), 'wb') as f:
-        f.write(binary)
+            dump_configinfo(orig_binary, cioffset, filename_dict, push_line)
