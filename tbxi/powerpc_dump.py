@@ -156,7 +156,7 @@ def dump_configinfo(binary, offset, filename_dict, push_line):
             elif key == 'BootstrapVersion':
                 value = shlex.quote(raw_value.decode('mac_roman'))
             elif key.endswith('Offset') and key.startswith(('Mac68KROM', 'ExceptionTable', 'HWInitCode', 'KernelCode', 'EmulatorCode', 'OpcodeTable', 'OpenFWBundle')):
-                if getattr(s, key.replace('Offset', 'Size')) == 0:
+                if raw_value == 0:
                     value = '0x00000000'
                 else:
                     value = 'BASE0x%+X' % (raw_value - s.ROMImageBaseOffset)
