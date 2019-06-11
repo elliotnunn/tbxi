@@ -53,6 +53,7 @@ def extract_decldata(binary):
     return binary[binary.rfind(PAD) + len(PAD):]
 
 
+# Get a list of (entry_offset, data_offset, data_len)
 def extract_resource_offsets(binary):
     # chase the linked list around
     offsets = []
@@ -60,7 +61,9 @@ def extract_resource_offsets(binary):
     reshead = SuperMarioHeader.unpack_from(binary).RomRsrc
     link = ResHeader.unpack_from(binary, reshead).offsetToFirst
     while link:
-        offsets.append(link)
+        data = ResEntry.unpack_from(binary, link).offsetToData
+        datasize = FakeMMHeader.unpack_from(binary, data - 16).dataSizePlus12 - 12
+        offsets.append((link, data, datasize))
         link = ResEntry.unpack_from(binary, link).offsetToNext
 
     offsets.reverse()
@@ -116,18 +119,31 @@ def dump(binary, dest_dir):
         unavail_filenames = set(['', '.pef', '.pict'])
         types_where_Main_should_be_in_filename = set()
 
-        for i, offset in enumerate(extract_resource_offsets(binary)):
+        known_forced_offsets = []
+
+        for i, (hoffset, doffset, dlen) in enumerate(extract_resource_offsets(binary)):
             rsrc_dir = path.join(dest_dir, 'Rsrc')
             os.makedirs(rsrc_dir, exist_ok=True)
 
-            entry = ResEntry.unpack_from(binary, offset)
-            mmhead = FakeMMHeader.unpack_from(binary, entry.offsetToData - FakeMMHeader.size)
+            data = binary[doffset:doffset+dlen]
+            entry = ResEntry.unpack_from(binary, hoffset)
 
-            # assert entry.
-            assert mmhead.MagicKurt == b'Kurt'
-            assert mmhead.MagicC0A00000 == 0xC0A00000
+            offset_forced = False
+            if hoffset < doffset: # Either offset was forced, or previous forced offset caused fit problems
+                # Tricky guessing: check whether the data would have fit where the entry struct went
+                for known in known_forced_offsets:
+                    if hoffset <= known < hoffset + 16 + dlen:
+                        break
+                else:
+                    offset_forced = True
+
+            if offset_forced:
+                known_forced_offsets.append(doffset - 16)
+
+            # mmhead = FakeMMHeader.unpack_from(binary, doffset - 16)
+            # assert mmhead.MagicKurt == b'Kurt'
+            # assert mmhead.MagicC0A00000 == 0xC0A00000
             
-            data = binary[entry.offsetToData:][:mmhead.dataSizePlus12 - 12]
             report_combo_field = COMBO_FIELDS.get(entry.combo, '0b' + bin(entry.combo >> 56)[2:].zfill(8))
 
             if entry.rsrcName == b'%A5Init':
@@ -160,6 +176,8 @@ def dump(binary, dest_dir):
             report = ljustspc(report + 'src=' + shlex.quote(filename), 84)
             if report_combo_field != 'AllCombos':
                 report = ljustspc(report + 'combo=' + report_combo_field, 0)
+            if offset_forced:
+                report = ljustspc(report + 'offset=0x%X' % (doffset - 16), 0)
             report = report.rstrip()
 
             print(report, file=f)
