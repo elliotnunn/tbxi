@@ -106,14 +106,14 @@ def parse_configinfo(src_path):
 
 
 def insert_and_assert(binary, insertee, offset):
-    print(hex(offset))
     new_len = offset + len(insertee)
     binary.extend(b'\0' * (new_len - len(binary)))
 
     existing = binary[offset:offset+len(insertee)]
-    if existing != insertee and any(existing):
-        open('/tmp/elmo', 'wb').write(existing)
-        raise ValueError('inserting over something else @%X' % offset)
+    if any(existing): # premature optimisation
+        for a, b in zip(insertee, existing):
+            if a != 0 and b != 0 and a != b:
+                raise ValueError('inserting over something else @%X' % offset)
 
     binary[offset:offset+len(insertee)] = insertee
 
@@ -170,7 +170,10 @@ def build(src):
                             # The parallel filenames dict tells us what data to put at that address
                             if k in filenames:
                                 blob = dispatcher.build(path.join(src, filenames[k]))
-                                insert_and_assert(rom, blob, v - fields['ROMImageBaseOffset'])
+                                try:
+                                    insert_and_assert(rom, blob, v - fields['ROMImageBaseOffset'])
+                                except ValueError:
+                                    raise ValueError('Could not insert %r at %s' % (filenames[k], v - fields['ROMImageBaseOffset']))
 
             elif header == 'LowMemory':
                 for words in lines:
