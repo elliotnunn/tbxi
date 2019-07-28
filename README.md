@@ -15,6 +15,16 @@ The text-file formats produced by `tbxi dump` are designed to be easily
 editable using text editors and scripts.
 
 
+## Patch Library
+
+This repository contains known-good scripts to patch the ROM, for
+example to add Mac mini G4 support to Mac OS 9:
+
+https://github.com/elliotnunn/tbxi-patches
+
+Patches can be applied to a dumped directory or the the ROM file itself.
+
+
 ## Background
 
 "OldWorld" (pre-USB) Macs contain a real physical ROM. "NewWorld" Macs
@@ -52,9 +62,6 @@ the data fork.
 
 The `tbxi dump` format is likely to change. If you keep a collection of
 dumped ROM images to peruse, re-dump them regularly.
-
-No specific guidance is provided on ROM patches that are known to work,
-e.g. to boot Mac OS 9 on the PowerPC Mac mini.
 
 
 ## Contributing
