@@ -1,6 +1,7 @@
 from os import path
 import re
 import zlib
+import sys
 
 try:
     from .fast_lzss import compress
@@ -15,12 +16,35 @@ def append_checksum(binary):
     binary.extend(cksum)
 
 
+# Fix a subtle incompatibility between pre/post-v7.8 scripts & trampolines
+# (this is ugly)
+def edit_bootscript_for_elf(script, tramp):
+    oldprop = b'AAPL,toolbox-image,lzss'
+    newprop = b'AAPL,toolbox-parcels'
+
+    matrix = (oldprop in script, newprop in script, oldprop in tramp, newprop in tramp)
+
+    if matrix == (True, False, False, True):
+        print('Bootscript older than MacOS.elf (fixing %s => %s)' % (oldprop.decode('ascii'), newprop.decode('ascii')), file=sys.stderr)
+        script = script.replace(oldprop, newprop)
+    elif matrix == (False, True, True, False):
+        print('Bootscript newer than MacOS.elf (fixing %s => %s)' % (newprop.decode('ascii'), oldprop.decode('ascii')), file=sys.stderr)
+        script = script.replace(newprop, oldprop)
+    else:
+        return script
+
+    return script
+
+
 def build(src):
     try:
         with open(path.join(src, 'Bootscript'), 'rb') as f:
             booter = bytearray(f.read().replace(b'\n', b'\r'))
     except (NotADirectoryError, FileNotFoundError):
         raise dispatcher.WrongFormat
+
+    elf = dispatcher.build(path.join(src, 'MacOS.elf'))
+    booter[:] = edit_bootscript_for_elf(booter, elf)
 
     has_checksum = (b'adler32' in booter)
 
@@ -42,7 +66,7 @@ def build(src):
         booter.extend(b'\0' * (constants['elf-offset'] - len(booter)))
 
         constants['elf-offset'] = len(booter)
-        booter.extend(dispatcher.build(path.join(src, 'MacOS.elf')))
+        booter.extend(elf)
         constants['elf-size'] = len(booter) - constants['elf-offset']
 
     if 'lzss-offset' in constants:
