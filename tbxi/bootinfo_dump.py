@@ -1,13 +1,19 @@
 import os
 from os import path
 import re
+import sys
+import macresources
 
 from .slow_lzss import decompress
 
 from . import dispatcher
+from . import cfrg_rsrc
 
 
+# Special case: expects a (data, resource_list) tuple
 def dump(binary, dest_dir):
+    if not isinstance(binary, tuple): raise dispatcher.WrongFormat
+    binary, rsrc = binary
     if not binary.startswith(b'<CHRP-BOOT>'): raise dispatcher.WrongFormat
 
     os.makedirs(dest_dir, exist_ok=True)
@@ -48,3 +54,24 @@ def dump(binary, dest_dir):
         parcels = decompress(parcels)
 
     dispatcher.dump(parcels, path.join(dest_dir, filename))
+
+    # Lastly, dump the System Enabler (if present and rsrc fork not stripped)
+    if rsrc:
+        cfrgs = [r for r in rsrc if r.type == b'cfrg']
+
+        start, stop = cfrg_rsrc.get_dfrk_range([c.data for c in cfrgs], len(binary))
+
+        for c in cfrgs:
+            c.data = cfrg_rsrc.adjust_dfrkoffset_fields(c.data, -start)
+
+        with open(path.join(dest_dir, 'SysEnabler'), 'wb') as f:
+            f.write(binary[start:stop])
+
+        with open(path.join(dest_dir, 'SysEnabler.rdump'), 'wb') as f:
+            f.write(macresources.make_rez_code(rsrc, ascii_clean=True))
+
+        with open(path.join(dest_dir, 'SysEnabler.idump'), 'wb') as f:
+            f.write(b'gblyMACS')
+
+    elif b'Joy!' in binary[other_offset+other_size:]:
+        print('Resource fork missing, ignoring orphaned data fork PEFs', file=sys.stderr)

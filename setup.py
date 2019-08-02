@@ -24,6 +24,7 @@ setup_args = dict(
     ],
     zip_safe=True,
     packages=['tbxi'],
+    install_requires=['macresources'],
     entry_points=dict(console_scripts=['tbxi = tbxi.__main__:main']),
     ext_modules=[Extension('tbxi.fast_lzss', ['speedups/fast_lzss.c'])],
 )

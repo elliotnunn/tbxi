@@ -60,6 +60,8 @@ def dump(binary, dest_path, toplevel=False):
     for fmt in FORMATS:
         mod = importlib.import_module('..%s_dump' % fmt, __name__)
         try:
+            arg = binary
+            if isinstance(arg, tuple) and fmt != 'bootinfo': arg = arg[0] # strip found resource fork
             mod.dump(binary, dest_path)
             print(fmt)
             break

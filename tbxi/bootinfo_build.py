@@ -2,6 +2,7 @@ from os import path
 import re
 import zlib
 import sys
+import macresources
 
 try:
     from .fast_lzss import compress
@@ -9,6 +10,7 @@ except ImportError:
     from .slow_lzss import compress
 
 from . import dispatcher
+from . import cfrg_rsrc
 
 
 def append_checksum(binary):
@@ -100,4 +102,22 @@ def build(src):
 
     if has_checksum: append_checksum(booter)
 
-    return bytes(booter)
+    # Add a System Enabler (or even just 'vers' information)
+    rsrcfork = []
+    try:
+        datafork = open(path.join(src, 'SysEnabler'), 'rb').read()
+        rsrcfork = list(macresources.parse_rez_code(open(path.join(src, 'SysEnabler.rdump'), 'rb').read()))
+
+        while len(booter) % 16: booter.append(0)
+        delta = len(booter)
+        booter.extend(datafork)
+        if len(datafork) > 0 and has_checksum: append_checksum(booter)
+
+        for r in rsrcfork:
+            if r.type == b'cfrg':
+                r.data = cfrg_rsrc.adjust_dfrkoffset_fields(r.data, delta)
+
+    except FileNotFoundError:
+        pass
+
+    return bytes(booter), rsrcfork

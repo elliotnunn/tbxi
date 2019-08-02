@@ -6,6 +6,7 @@ import sys
 import os
 from os import path
 import shutil
+import macresources
 
 from .slow_lzss import decompress
 
@@ -56,7 +57,34 @@ def main(args=None):
             except FileNotFoundError:
                 pass
 
-            dispatcher.dump(f.read(), args.output, toplevel=True)
+            base, ext = path.splitext(args.file)
+            if ext.lower() == '.hqx':
+                import binhex
+                hb = binhex.HexBin(f)
+                data = hb.read()
+                rsrc = list(macresources.parse_file(hb.read_rsrc()))
+
+            else:
+                data = f.read()
+                rsrc = []
+
+                if not rsrc:
+                    try:
+                        with open(args.file + '.rdump', 'rb') as f:
+                            rsrc = list(macresources.parse_rez_code(f.read()))
+                    except FileNotFoundError:
+                        pass
+
+                if not rsrc:
+                    try:
+                        with open(args.file + '/..namedfork/rsrc', 'rb') as f:
+                            rsrc = list(macresources.parse_file(f.read()))
+                    except FileNotFoundError:
+                        pass
+
+            tpl = (data, rsrc)
+
+            dispatcher.dump(tpl, args.output, toplevel=True)
 
     elif command == 'build':
         parser.add_argument('dir', metavar='<input-dir>', help='source directory')
@@ -67,7 +95,8 @@ def main(args=None):
 
         data = dispatcher.build(args.dir)
 
-        if data.startswith(b'<CHRP-BOOT>'):
+        if isinstance(data, tuple):
+            data, rsrc = data # unpack the resource list from the data fork
             base, ext = path.splitext(args.output)
             if ext.lower() == '.hqx':
                 import binhex
@@ -77,14 +106,29 @@ def main(args=None):
                 finfo.Type = b'tbxi'
                 finfo.Flags = 0
 
-                bh = binhex.BinHex(('Mac OS ROM', finfo, len(data), 0), args.output)
+                # Special-casing for no-resource-fork
+                rsrc = macresources.make_file(rsrc) if rsrc else b''
+
+                bh = binhex.BinHex(('Mac OS ROM', finfo, len(data), len(rsrc)), args.output)
                 bh.write(data)
-                bh.write_rsrc(b'')
+                bh.write_rsrc(rsrc)
                 bh.close()
 
                 return # do not write the usual way
 
             else:
+                rsrc = macresources.make_rez_code(rsrc, ascii_clean=True)
+
+                # Special-casing for no-resource-fork
+                if rsrc:
+                    with open(args.output + '.rdump', 'wb') as f:
+                        f.write(rsrc)
+                else:
+                    try:
+                        os.remove(args.output + '.rdump')
+                    except FileNotFoundError:
+                        pass
+
                 with open(args.output + '.idump', 'wb') as f:
                     f.write(b'tbxichrp')
 

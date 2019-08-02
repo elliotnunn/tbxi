@@ -54,12 +54,6 @@ original build process.
 ROM images predating before the "SuperMario" ROM (Quadra 660AV/840AV)
 are not supported, excluding most 68k Mac ROMs.
 
-The resource fork of a NewWorld ROM image is ignored, despite
-containting a System Enabler that is paired with the data fork contents.
-Simply copying the resource fork back will cause a crash, because the
-'cfrg' resource contains offests to some PowerPC binaries at the end of
-the data fork.
-
 The `tbxi dump` format is likely to change. If you keep a collection of
 dumped ROM images to peruse, re-dump them regularly.
 
