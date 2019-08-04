@@ -62,7 +62,7 @@ def dump(binary, dest_path, toplevel=False):
         try:
             arg = binary
             if isinstance(arg, tuple) and fmt != 'bootinfo': arg = arg[0] # strip found resource fork
-            mod.dump(binary, dest_path)
+            mod.dump(arg, dest_path)
             print(fmt)
             break
         except WrongFormat:
