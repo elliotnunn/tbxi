@@ -9,6 +9,51 @@ from . import dispatcher
 from .slow_lzss import decompress
 from .lowlevel import PrclNodeStruct, PrclChildStruct
 
+
+HEADER_COMMENT = """
+# Automated dump of Toolbox Parcels
+
+# Parcels contain any number of children, with each containing binary data.
+#   no tabs = parcel:       type [flags=N] [a=STR] [b=STR]
+#   1 tab   = child:        type [flags=N] [name=STR] [src=PATH[.lzss]] [deduplicate=1]
+#   2 tabs  = inline data:  STR (lines get null-terminated)
+
+# The Trampoline interprets each parcel according to its type:
+#   'prop' => match and edit an existing device tree node
+#   'node' => create a new 'special' device tree node
+#   'rom ' => contains the 4 MB Power Mac ROM image
+#   'psum' => guide the device tree checksum
+
+# Flag    Applies to     Meaning
+# -----   -----------    ---------------------------------------------
+# F0000   prcl, child    mask of 'special' node number (to create or edit)
+# 00200   prcl           load node only if needed to access boot disk
+# 00100         child    use child only in debug mode
+# 00080         child    add prop to special node instead of parent
+# 00040         child    delete existing prop (vs create new prop)
+# 00020         child    do not replace prop if it already exists
+# 00010   prcl, child    use node/child only once in the device tree
+# 00008   prcl           match node iff ('device_type' prop == 'a' field)  AND
+# 00004   prcl           ('compatible' prop array contains 'b' field  OR
+# 00002   prcl            'name' prop of parent == 'b' field  OR
+# 00001   prcl            'name' prop == 'b' field)
+#  (NB: Here 'node' and 'prop' refer to the device tree, not to parcel types.)
+
+# Miscellany:
+# - A child's type is unimportant.
+# - A child's data can be specified using inline text, or a 'src' field, but not both.
+# - Appending '.lzss' to a 'src' compresses the data at the base path.
+# - The 'psum' parcel selects contributors to dev tree checksum, with children in this order:
+#   1. property whitelist
+#   2. node 'name' whitelist
+#   3. node 'name' blacklist
+#   4. node 'device-type' whitelist
+#   5. node 'device-type' blacklist
+# - Rebuilds are not byte-perfect because the original padding contains uninitialized data.
+
+""".strip()
+
+
 def walk_tree(binary):
     """Get low level representation of tree
 
@@ -166,6 +211,8 @@ def dump(binary, dest_dir):
 
     # Get printing!!!
     with open(path.join(dest_dir, 'Parcelfile'), 'w') as f:
+        f.write(HEADER_COMMENT + '\n\n')
+
         for prclnode, children in basic_structure:
             line = quote(prclnode.ostype)
             line += ' flags=0x%05x' % prclnode.flags
