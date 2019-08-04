@@ -38,7 +38,7 @@ During the progression from 68k ROMs to NewWorld PowerPC ROMs, multiple
 layers of wrapping and abstraction were added. These are reflected in
 the multi-level output of `tbxi dump`:
 
-- Open Firmware bootinfo file (`Mac OS ROM` => `Bootinfo` textfile + binaries)
+- Open Firmware bootinfo file (`Mac OS ROM` => `Bootscript` textfile + binaries)
 - structured binary of "Parcels" (`Parcels` => `Parcelfile` textfile + binaries)
 - 4 MB PowerPC ROM (`MacROM` => `Configfile-1` textfile + binaries)
 - 3 MB 68k ROM (`Mac68kROM` => `Romfile` textfile + binaries)
