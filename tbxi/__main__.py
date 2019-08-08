@@ -11,6 +11,7 @@ import macresources
 from .slow_lzss import decompress
 
 from . import dispatcher
+from . import binhex
 
 
 def main(args=None):
@@ -59,7 +60,6 @@ def main(args=None):
 
             base, ext = path.splitext(args.file)
             if ext.lower() == '.hqx':
-                import binhex
                 hb = binhex.HexBin(f)
                 data = hb.read()
                 rsrc = list(macresources.parse_file(hb.read_rsrc()))
@@ -99,8 +99,6 @@ def main(args=None):
             data, rsrc = data # unpack the resource list from the data fork
             base, ext = path.splitext(args.output)
             if ext.lower() == '.hqx':
-                import binhex
-
                 finfo = binhex.FInfo()
                 finfo.Creator = b'chrp'
                 finfo.Type = b'tbxi'
