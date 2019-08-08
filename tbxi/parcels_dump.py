@@ -13,47 +13,33 @@ from .lowlevel import PrclNodeStruct, PrclChildStruct
 HEADER_COMMENT = """
 # Automated dump of Toolbox Parcels (magic number 'prcl')
 
-# Parcels contain metadata and binary blob 'children':
-#   Parcel:       type [flags=N] [a=STR] [b=STR]
-#   Child:        <tab> type [flags=N] [name=STR] [src=PATH[.lzss]] [deduplicate=1]
-#   Inline data:  <tab><tab> STR (lines get null-terminated)
+#parcel_type [metadata...]
+\t#child_type [metadata...] [src=*[.lzss]]
+\t\t#null_terminated_strings_instead_of_src_file
 
-# They have a four-byte type:
-#   'prop': match and edit an existing dev tree node
-#   'node': special numbered node to insert into dev tree
+# Parcel types are four bytes (child types are unimportant)
+#   'prop': match and edit an existing DT node
+#   'node': create a new DT node
 #   'rom ': Power Macintosh ROM image
-#   'psum': black/whitelists for dev tree checksum calc
+#   'psum': black/whitelists for computing DT checksum
 
-# Known 'flags' in parcel and child metadata:
-#   Flag    Applies to     Meaning
-#   -----   -----------    ---------------------------------------------
-#   F0000   prcl, child    bitmask of special node number (to create or edit)
-#   00200   prcl           load node only if needed to access boot disk
-#   00100         child    prop implements optional 'EtherPrintfLib' debugging
-#   00080         child    add prop to special node instead of parent
-#   00040         child    delete existing prop (vs create new prop)
-#   00020         child    do not replace prop if it already exists
-#   00010   prcl, child    use node/child only once in the dev tree
-#   00008   prcl           match node iff ('device_type' prop == 'a' field)  AND
-#   00004   prcl           ('compatible' prop array contains 'b' field  OR
-#   00002   prcl            'name' prop of parent == 'b' field  OR
-#   00001   prcl            'name' prop == 'b' field)
-#    (NB: Here 'node' and 'prop' refer to the dev tree, not to parcel types.)
-
-# Miscellany:
-#   - A child's type is unimportant.
-#   - A child's data can be read from a 'src' file or from inline data prefixed
-#     with 2 tabs, but not both.
-#   - Appending '.lzss' to a 'src' compresses the data at the base path.
-#   - The 'psum' parcel selects contributors to dev tree checksum, with 'csta'
-#     children in this order:
-#       1. property whitelist
-#       2. node 'name' whitelist
-#       3. node 'name' blacklist
-#       4. node 'device-type' whitelist
-#       5. node 'device-type' blacklist
-#   - Rebuilds are not byte-perfect because the original padding contains
-#     uninitialized data.
+#  Flag    Struct   Meaning of known flag
+#  -----   ------   --------------------------------------------
+#  F0000   parcel   (bitmask) number of new 'special' DT node
+#  00200   parcel   edit DT node only if required for boot disk
+#  00010   parcel   use only once
+#  00008   parcel   match DT node if: ('device_type' == a field)
+#  00004   parcel      AND  ('compatible' contains b field
+#  00002   parcel           OR   parent 'name' == b field
+#  00001   parcel           OR   'name' == b field)
+#  -----   ------   --------------------------------------------
+#  F0000   child    (bitmask) number of 'special' parent
+#  00080   child    create DT prop under 'special' DT node above
+#  00100   child    DT prop is for boot debugging only
+#  00040   child    delete existing DT prop (vs create)
+#  00020   child    do not replace existing DT prop
+#  00010   child    use only once
+#  00004   child    checksum enabled (crc32)
 
 """.strip()
 
@@ -237,6 +223,13 @@ def dump(binary, dest_dir):
 
                 if binary_counts[unique_binary_tpl(prclchild)] > 1:
                     line += ' deduplicate=1'
+
+                if prclnode.ostype == 'psum' and prclchild.ostype == 'csta':
+                    if prclchild is children[0]: line += "  # [5] Property whitelist:"
+                    if prclchild is children[1]: line += "  # [4] Node 'name' whitelist:"
+                    if prclchild is children[2]: line += "  # [3] Node 'name' blacklist:"
+                    if prclchild is children[3]: line += "  # [2] Node 'device-type' whitelist:"
+                    if prclchild is children[4]: line += "  # [1] Node 'device-type' blacklist:"
 
                 print(line, file=f)
 
