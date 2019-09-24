@@ -3,11 +3,13 @@ import os
 from os import path
 from shlex import quote
 import struct
+import hashlib
 
 from . import dispatcher
 
 from .slow_lzss import decompress
 from .lowlevel import PrclNodeStruct, PrclChildStruct
+from .pef_info import suggest_name
 
 
 HEADER_COMMENT = """
@@ -44,6 +46,10 @@ HEADER_COMMENT = """
 """.strip()
 
 
+def quickhash(foo):
+    return hashlib.sha512(foo).hexdigest()
+
+
 def walk_tree(binary):
     """Get low level representation of tree
 
@@ -71,83 +77,28 @@ def unique_binary_tpl(prclchild):
     return (prclchild.ptr, prclchild.packedlen, prclchild.compress)
 
 
-def suggest_names_to_dump(parent, child, code_name):
-    # We yield heaps of suggested filenames, and the shortest non-empty unique one gets chosen
+def guess_binary_name(parent_struct, child_struct, adjacent_name, data):
+    # 4 MB ROM-in-RAM image
+    if parent_struct.ostype == child_struct.ostype == 'rom ':
+        return 'MacROM'
 
-    if parent.ostype == child.ostype == 'rom ':
-        yield 'MacROM'
-        return
+    # Native (PCI) driver with an embedded name and version
+    ndrv_name = suggest_name(data)
+    if ndrv_name: return ndrv_name
 
-    if 'AAPL,MacOS,PowerPC' in child.name and code_name == 'PowerMgrPlugin':
-        if parent.a == 'cuda' and parent.b == 'via-cuda':
-            yield 'PowerMgrPlugin.CUDA'
-        elif parent.a == 'pmu' and parent.b == 'power-mgt':
-            yield 'PowerMgrPlugin.PMU'
-        elif parent.a == 'via-pmu-99' and parent.b == 'power-mgt':
-            yield 'PowerMgrPlugin.PMU99'
-        elif parent.a == 'via-pmu-2000' and parent.b == 'power-mgt':
-            yield 'PowerMgrPlugin.PMU2000'
-        elif parent.a == 'bal' and parent.b == 'power-mgt':
-            yield 'PowerMgrPlugin.BlueBox'
+    # A "special" property called by its actual name
+    if parent_struct.flags & 0xF0000 or child_struct.flags & 0x80:
+        return child_struct.name
 
-    if ',' not in child.name: # All property names except driver,AAPL,MacOS,pef et al
-        yield child.name
+    # A driver property with an adjacent name property
+    if 'AAPL,MacOS,PowerPC' in child_struct.name and adjacent_name:
+        return adjacent_name
 
-    if child.flags & 0x80: # special-node stuff
-        yield child.name
-        yield squish_name(child.name, parent.a, parent.b)
+    # A lanLib (for netbooting)
+    if child_struct.name == 'lanLib,AAPL,MacOS,PowerPC':
+        return parent_struct.a
 
-    if 'AAPL,MacOS,PowerPC' in child.name:
-        if code_name:
-            yield squish_name(code_name, parent.a, parent.b)
-        else:
-            yield squish_name(parent.a, parent.b)
-
-
-def squish_name(*parts):
-    squeeze = lambda x: x.lower().replace('-', '').replace('_', '')
-
-    parts = list(parts)
-    keepmask = [True] * len(parts)
-
-    for i in range(len(parts)):
-        for j in range(len(parts)):
-            if i == j: continue
-            if squeeze(parts[j]) == squeeze(parts[i]):
-                if j > i: keepmask[j] = False
-            elif squeeze(parts[j]) in squeeze(parts[i]):
-                keepmask[j] = False
-
-    truelist = []
-    for i in range(len(parts)):
-        if keepmask[i]: truelist.append(parts[i])
-
-    return '.'.join(truelist)
-
-
-def settle_name_votes(vote_dict):
-    # Forbid duplicate names
-    duplicate_names = set([''])
-    for ka, va in vote_dict.items():
-        for kb, vb in vote_dict.items():
-            if ka is kb: continue
-
-            for x in va:
-                if x in vb:
-                    duplicate_names.add(x)
-
-    # Pick the shortest non-duplicate name
-    decision = {}
-    for k, v in vote_dict.items():
-        allowed_names = [x for x in v if x not in duplicate_names]
-        if allowed_names:
-            decision[k] = min(allowed_names, key=len)
-
-    return decision
-
-
-def is_parcels(binary):
-    return binary.startswith(b'prcl')
+    return ''
 
 
 def dump(binary, dest_dir):
@@ -159,6 +110,7 @@ def dump(binary, dest_dir):
 
     # Decompress everything
     unpacked_dict = {}
+    binary_of = lambda child: unpacked_dict[unique_binary_tpl(child)]
     binary_counts = Counter()
     for prclnode, children in basic_structure:
         for prclchild in children:
@@ -169,35 +121,38 @@ def dump(binary, dest_dir):
 
             unpacked_dict[unique_binary_tpl(prclchild)] = data
 
-    # Suggest possible filenames for each blob
-    name_vote_dict = defaultdict(list)
+    filename_dict = {} # maps binary data to a filename
     for prclnode, children in basic_structure:
-        # is there a prop that gives contextual name information?
+        # A fragment prop may have an adjacent prop giving it a name, get this ready
+        adjacent_name = None
         for check_child in children:
             if check_child.name == 'code,AAPL,MacOS,name':
-                code_name = unpacked_dict[unique_binary_tpl(check_child)].rstrip(b'\0').decode('ascii')
-                break
-        else:
-            code_name = None
+                adjacent_name = unpacked_dict[unique_binary_tpl(check_child)].rstrip(b'\0').decode('ascii')
 
-        # now use that name to suggest names for all the children
+        # Best guess original-ish name for this binary
         for prclchild in children:
-            if prclchild.ostype in ('cstr', 'csta'): continue
-            votes = suggest_names_to_dump(prclnode, prclchild, code_name)
-            if unpacked_dict[unique_binary_tpl(prclchild)].startswith(b'Joy!'):
-                votes = [v + '.pef' for v in votes]
-            name_vote_dict[unique_binary_tpl(prclchild)].extend(votes)
+            if prclchild.ostype not in ('cstr', 'csta'):
+                base = guess_binary_name(
+                    parent_struct=prclnode,
+                    child_struct=prclchild,
+                    adjacent_name=adjacent_name,
+                    data=binary_of(prclchild),
+                )
+                filename_dict[binary_of(prclchild)] = base
 
-    # Decide on filenames
-    decision = settle_name_votes(name_vote_dict)
+    # Post-process to ensure that all names are unique
+    used_names = Counter(filename_dict.values())
+    for binary, filename in list(filename_dict.items()):
+        if used_names[filename] > 1:
+            if filename: filename += '-'
+            filename += quickhash(binary)
+            filename_dict[binary] = filename 
+
+    filename_dict = {b: (fn+'.pef' if b.startswith(b'Joy!peff') else fn) for (b, fn) in filename_dict.items()}
 
     # Dump blobs to disk
-    for tpl, filename in decision.items():
-        keep_this = True
-
-        data = unpacked_dict[tpl]
+    for data, filename in filename_dict.items():
         dispatcher.dump(data, path.join(dest_dir, filename))
-
 
     # Get printing!!!
     with open(path.join(dest_dir, 'Parcelfile'), 'w') as f:
@@ -217,9 +172,9 @@ def dump(binary, dest_dir):
                 if prclchild.name: line += ' name=%s' % quote(prclchild.name)
 
                 if prclchild.ostype not in ('cstr', 'csta'):
-                    filename = decision[unique_binary_tpl(prclchild)]
+                    filename = filename_dict[binary_of(prclchild)]
                     if prclchild.compress == 'lzss': filename += '.lzss'
-                    line += ' src=%s' % filename
+                    line += ' src=%s' % quote(filename)
 
                 if binary_counts[unique_binary_tpl(prclchild)] > 1:
                     line += ' deduplicate=1'
