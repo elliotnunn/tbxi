@@ -30,10 +30,10 @@ HEADER_COMMENT = """
 #  F0000   parcel   (bitmask) number of new 'special' DT node
 #  00200   parcel   edit DT node only if required for boot disk
 #  00010   parcel   use only once
-#  00008   parcel   match DT node if: ('device_type' == a field)
-#  00004   parcel      AND  ('compatible' contains b field
-#  00002   parcel           OR   parent 'name' == b field
-#  00001   parcel           OR   'name' == b field)
+#  00008   parcel   match DT node if: ('device_type' == b field)
+#  00004   parcel      AND  ('compatible' contains a field
+#  00002   parcel           OR   parent 'name' == a field
+#  00001   parcel           OR   'name' == a field)
 #  -----   ------   --------------------------------------------
 #  F0000   child    (bitmask) number of 'special' parent
 #  00080   child    create DT prop under 'special' DT node above
