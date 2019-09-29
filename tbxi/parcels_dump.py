@@ -96,7 +96,7 @@ def guess_binary_name(parent_struct, child_struct, adjacent_name, data):
 
     # A lanLib (for netbooting)
     if child_struct.name == 'lanLib,AAPL,MacOS,PowerPC':
-        return parent_struct.a
+        return parent_struct.a + '_lanLib'
 
     return ''
 
