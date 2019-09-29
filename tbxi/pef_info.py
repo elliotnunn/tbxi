@@ -174,6 +174,16 @@ def parse_version(num):
     return vers
 
 
+def pstring_or_cstring(s):
+    plen = s[0]
+    pstr = s[1:][:plen]
+    cstr = s.rstrip(b'\0')
+    if b'\0' in pstr or plen + 1 > len(s):
+        return cstr
+    else:
+        return pstr
+
+
 def suggest_name(pef):
     if not pef.startswith(b'Joy!peff'): return
 
@@ -186,7 +196,10 @@ def suggest_name(pef):
             if section and sectype in (1, 2):
                 hdr_ofs = section.find(b'mtej')
                 if hdr_ofs != -1:
-                    sig, strvers, devnam, drvvers = struct.unpack_from('>4s L 32p L', section, hdr_ofs)                
+                    sig, strvers, devnam, drvvers = struct.unpack_from('>4s L 32s L', section, hdr_ofs)                
+
+                    # devnam *should* be a 32-byte pascal string, but not if someone forgot the "\p"...
+                    devnam = pstring_or_cstring(devnam)
 
                     sugg = devnam.decode('mac_roman') + '-' + parse_version(drvvers)
                     return sugg
