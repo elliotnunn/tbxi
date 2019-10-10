@@ -161,7 +161,7 @@ def parse_version(num):
     else:
         stage = '?'
 
-    unreleased = '%0x' % unreleased
+    unreleased = '%d' % unreleased
 
     vers = maj + '.' + minor
 
