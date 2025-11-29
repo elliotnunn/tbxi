@@ -79,7 +79,7 @@ def main(args=None):
                     try:
                         with open(args.file + '/..namedfork/rsrc', 'rb') as f:
                             rsrc = list(macresources.parse_file(f.read()))
-                    except FileNotFoundError:
+                    except: # FNF, not a directory
                         pass
 
             tpl = (data, rsrc)
