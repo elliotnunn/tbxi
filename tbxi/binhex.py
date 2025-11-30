@@ -21,10 +21,15 @@ hexbin(inputfilename, outputfilename)
 # input. The resulting code (xx 90 90) would appear to be interpreted as an
 # escaped *value* of 0x90. All coders I've seen appear to ignore this nicety...
 #
+# Karl Knechtel, November 2025.
+#
+# Modified to use a project-local alternative to `binascii` instead.
+#
 import io
 import os
 import struct
-import binascii
+
+from . import hqx
 
 __all__ = ["binhex","hexbin","Error"]
 
@@ -93,7 +98,7 @@ class _Hqxcoderengine:
         self.data = self.data[todo:]
         if not data:
             return
-        self.hqxdata = self.hqxdata + binascii.b2a_hqx(data)
+        self.hqxdata = self.hqxdata + hqx.b2a(data)
         self._flush(0)
 
     def _flush(self, force):
@@ -109,7 +114,7 @@ class _Hqxcoderengine:
 
     def close(self):
         if self.data:
-            self.hqxdata = self.hqxdata + binascii.b2a_hqx(self.data)
+            self.hqxdata = self.hqxdata + hqx.b2a(self.data)
         self._flush(1)
         self.ofp.close()
         del self.ofp
@@ -125,13 +130,13 @@ class _Rlecoderengine:
         self.data = self.data + data
         if len(self.data) < REASONABLY_LARGE:
             return
-        rledata = binascii.rlecode_hqx(self.data)
+        rledata = hqx.rle_encode(self.data)
         self.ofp.write(rledata)
         self.data = b''
 
     def close(self):
         if self.data:
-            rledata = binascii.rlecode_hqx(self.data)
+            rledata = hqx.rle_encode(self.data)
             self.ofp.write(rledata)
         self.ofp.close()
         del self.ofp
@@ -180,12 +185,12 @@ class BinHex:
         self._writecrc()
 
     def _write(self, data):
-        self.crc = binascii.crc_hqx(data, self.crc)
+        self.crc = hqx.crc(data, self.crc)
         self.ofp.write(data)
 
     def _writecrc(self):
         # XXXX Should this be here??
-        # self.crc = binascii.crc_hqx('\0\0', self.crc)
+        # self.crc = hqx.crc('\0\0', self.crc)
         if self.crc < 0:
             fmt = '>h'
         else:
@@ -276,9 +281,9 @@ class _Hqxdecoderengine:
             #
             while True:
                 try:
-                    decdatacur, self.eof = binascii.a2b_hqx(data)
+                    decdatacur, self.eof = hqx.a2b(data)
                     break
-                except binascii.Incomplete:
+                except hqx.Incomplete:
                     pass
                 newdata = self.ifp.read(1)
                 if not newdata:
@@ -313,7 +318,7 @@ class _Rledecoderengine:
         self.pre_buffer = self.pre_buffer + self.ifp.read(wtd + 4)
         if self.ifp.eof:
             self.post_buffer = self.post_buffer + \
-                binascii.rledecode_hqx(self.pre_buffer)
+                hqx.rle_decode(self.pre_buffer)
             self.pre_buffer = b''
             return
 
@@ -341,7 +346,7 @@ class _Rledecoderengine:
             mark = mark - 1
 
         self.post_buffer = self.post_buffer + \
-            binascii.rledecode_hqx(self.pre_buffer[:mark])
+            hqx.rle_decode(self.pre_buffer[:mark])
         self.pre_buffer = self.pre_buffer[mark:]
 
     def close(self):
@@ -372,12 +377,12 @@ class HexBin:
 
     def _read(self, len):
         data = self.ifp.read(len)
-        self.crc = binascii.crc_hqx(data, self.crc)
+        self.crc = hqx.crc(data, self.crc)
         return data
 
     def _checkcrc(self):
         filecrc = struct.unpack('>h', self.ifp.read(2))[0] & 0xffff
-        #self.crc = binascii.crc_hqx('\0\0', self.crc)
+        #self.crc = hqx.crc('\0\0', self.crc)
         # XXXX Is this needed??
         self.crc = self.crc & 0xffff
         if filecrc != self.crc:
