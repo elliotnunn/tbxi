@@ -84,6 +84,22 @@ def crc(data, crc):
         crc = (low<<8) ^ _crctable[high^b]
     return crc
 
+def _get_repeat_count(bi):
+    try:
+        return next(bi)
+    except StopIteration:
+        raise Incomplete
+
+def _append_run(buffer, repeat_count, to_repeat):
+    if repeat_count == 0:
+        buffer.append(b)
+        return b
+    if to_repeat is None:
+        raise ValueError("Orphaned RLE code at start")
+    for i in range(repeat_count):
+        buffer.append(to_repeat)
+    return to_repeat # no change
+
 def rle_decode(data):
     # The original code seems to include some trickery to deal with "buffers"
     # that advertise a certain length of data but don't yet have all of it
@@ -95,23 +111,11 @@ def rle_decode(data):
     # the RLE code would repeat).
     result, bi, to_repeat = bytearray(), iter(data), None
     for b in bi:
-        if b != RUNCHAR:
-            result.append(b)
-            to_repeat = b
-            continue
-        try:
-            repeat_count = next(bi)
-        except StopIteration:
-            raise Incomplete
-        if repeat_count == 0:
-            result.append(b)
-            to_repeat = b
-        elif to_repeat is None:
-            raise ValueError("Orphaned RLE code at start")
+        if b == RUNCHAR:
+            to_repeat = _append_run(result, _get_repeat_count(bi), to_repeat)
         else:
-            # to_repeat does not change.
-            for i in range(repeat_count):
-                result.append(to_repeat)
+            result.append(b)
+            to_repeat = b
     return bytes(result)
 
 def rle_encode(data):
