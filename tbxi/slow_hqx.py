@@ -115,33 +115,33 @@ def rle_decode(data):
             result.append(b)
     return bytes(result)
 
-def rle_encode(data):
-    result, repeated, repeat_count = bytearray(), None, 0
-    def _flush():
-        if repeated is None:
-            return
-        if repeat_count > 3:
-            result.append(repeated)
-            result.append(RUNCHAR)
-            result.append(repeat_count)
-        else:
-            for i in range(repeat_count):
-                result.append(repeated)
-        repeated, repeat_count = None, 0
+def _add_run(buffer, b, count):
+    if b is None:
+        return
+    if b == RUNCHAR: # FIXME: allow for compressed runs of RUNCHAR?
+        buffer.extend([RUNCHAR, 0] * count)
+        return
+    # The original code appears to handle long runs by outputting
+    # a new "to-repeat" byte for each group of 255.
+    while count > 255:
+        buffer.extend([b, RUNCHAR, 255]) # represents 255 occurrences
+        count -= 255
+    if count > 3:
+        buffer.extend([b, RUNCHAR, count])
+    else:
+        buffer.extend([b] * count)
 
+def rle_encode(data):
+    # Chunk the input bytes into consecutive runs of equal bytes,
+    # and add an encoding of each to the result.
+    # This manual chunking should be faster than itertools.groupby.
+    result, to_add, count = bytearray(), None, 0
     for b in data:
-        if b == repeated:
-            repeat_count += 1
-            if repeat_count == 255: # hit the maximum
-                _flush()
-            continue
-        if repeated is not None:
-            _flush()
-        if b == RUNCHAR:
-            result.append(RUNCHAR)
-            result.append(0)
-            # FIXME: Should we look for runs of RUNCHAR?
+        if b == to_add:
+            count += 1
         else:
-            repeated = b
-    if repeated is not None:
-        _flush()
+            _add_run(result, to_add, count)
+            to_add, count = b, 1
+    # Add the last run.
+    _add_run(result, to_add, count)
+    return bytes(result)
