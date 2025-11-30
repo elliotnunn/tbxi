@@ -1,6 +1,8 @@
 """A pure-Python implementation of hqx (Mac "binhex") encoding,
 modeled on the original C code by Jack Jansen."""
 
+RUNCHAR = 0x90
+
 _b2atable = "!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr"
 _a2btable = {i, c for c, i in enumerate(_b2atable)}
 
@@ -83,7 +85,62 @@ def crc(data, crc):
     return crc
 
 def rle_decode(data):
-    raise NotImplementedError
+    # The original code seems to include some trickery to deal with "buffers"
+    # that advertise a certain length of data but don't yet have all of it
+    # available. But this doesn't make sense at the Python level.
+    # The original code did special handling for the beginning of the data
+    # (to detect an orphaned RLE code), and therefore special handling for
+    # an empty input (where the first byte is not available). But we can
+    # simplify this by just using a sentinel value for the "last byte" (which
+    # the RLE code would repeat).
+    result, bi, to_repeat = bytearray(), iter(data), None
+    for b in bi:
+        if b != RUNCHAR:
+            result.append(b)
+            to_repeat = b
+            continue
+        try:
+            repeat_count = next(bi)
+        except StopIteration:
+            raise Incomplete
+        if repeat_count == 0:
+            result.append(b)
+            to_repeat = b
+        elif to_repeat is None:
+            raise ValueError("Orphaned RLE code at start")
+        else:
+            # to_repeat does not change.
+            for i in range(repeat_count):
+                result.append(to_repeat)
+    return bytes(result)
 
 def rle_encode(data):
-    raise NotImplementedError
+    result, repeated, repeat_count = bytearray(), None, 0
+    def _flush():
+        if repeated is None:
+            return
+        if repeat_count > 3:
+            result.append(repeated)
+            result.append(RUNCHAR)
+            result.append(repeat_count)
+        else:
+            for i in range(repeat_count):
+                result.append(repeated)
+        repeated, repeat_count = None, 0
+
+    for b in data:
+        if b == repeated:
+            repeat_count += 1
+            if repeat_count == 255: # hit the maximum
+                _flush()
+            continue
+        if repeated is not None:
+            _flush()
+        if b == RUNCHAR:
+            result.append(RUNCHAR)
+            result.append(0)
+            # FIXME: Should we look for runs of RUNCHAR?
+        else:
+            repeated = b
+    if repeated is not None:
+        _flush()
