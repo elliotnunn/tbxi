@@ -90,15 +90,14 @@ def _get_repeat_count(bi):
     except StopIteration:
         raise Incomplete
 
-def _append_run(buffer, repeat_count, to_repeat):
+def _append_run(buffer, repeat_count):
     if repeat_count == 0:
         buffer.append(b)
-        return b
-    if to_repeat is None:
+        return
+    if not buffer:
         raise ValueError("Orphaned RLE code at start")
     for i in range(repeat_count):
-        buffer.append(to_repeat)
-    return to_repeat # no change
+        buffer.append(buffer[-1])
 
 def rle_decode(data):
     # The original code seems to include some trickery to deal with "buffers"
@@ -106,16 +105,14 @@ def rle_decode(data):
     # available. But this doesn't make sense at the Python level.
     # The original code did special handling for the beginning of the data
     # (to detect an orphaned RLE code), and therefore special handling for
-    # an empty input (where the first byte is not available). But we can
-    # simplify this by just using a sentinel value for the "last byte" (which
-    # the RLE code would repeat).
-    result, bi, to_repeat = bytearray(), iter(data), None
+    # an empty input (where the first byte is not available). But it's simpler
+    # to just check the output length before looking for the byte to repeat.
+    result, bi = bytearray(), iter(data)
     for b in bi:
         if b == RUNCHAR:
-            to_repeat = _append_run(result, _get_repeat_count(bi), to_repeat)
+            _append_run(result, _get_repeat_count(bi))
         else:
             result.append(b)
-            to_repeat = b
     return bytes(result)
 
 def rle_encode(data):
