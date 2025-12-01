@@ -3,8 +3,8 @@ modeled on the original C code by Jack Jansen."""
 
 RUNCHAR = 0x90
 
-_b2atable = "!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr"
-_a2btable = {i, c for c, i in enumerate(_b2atable)}
+_b2atable = b"!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr"
+_a2btable = {i: c for (c, i) in enumerate(_b2atable)}
 
 _crctable = [
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -51,12 +51,12 @@ def a2b(data):
     for b in data:
         if b in b'\r\n':
             continue
-        if b == b':':
+        if b == b':'[0]:
             done = 1
             break
         # The original code defined a `binascii.Error`.
         # We'll just let the `KeyError` propagate instead.
-        value = a2b_table[b]
+        value = _a2btable[b]
         leftchar, leftbits = (leftchar << 6) | value, leftbits + 6
         if leftbits >= 8:
             leftbits -= 8
@@ -71,10 +71,10 @@ def b2a(data):
     for b in data:
         leftchar, leftbits = (leftchar << 8) | b, leftbits + 8
         while leftbits >= 6:
-            value, leftbits = (leftchar >> (leftbits - 6)), leftbits - 6
-            result.append(_b2a_table[value])
+            value, leftbits = (leftchar >> (leftbits - 6)) & 0x3f, leftbits - 6
+            result.append(_b2atable[value])
     if leftbits:
-        result.append(_b2a_table[leftchar << (6 - leftbits)])
+        result.append(_b2atable[leftchar << (6 - leftbits)])
     return bytes(result)
 
 def crc(data, crc):
@@ -92,11 +92,12 @@ def _get_repeat_count(bi):
 
 def _append_run(buffer, repeat_count):
     if repeat_count == 0:
-        buffer.append(b)
+        buffer.append(RUNCHAR)
         return
     if not buffer:
         raise ValueError("Orphaned RLE code at start")
-    for i in range(repeat_count):
+    # 1 copy of the byte was already appended.
+    for i in range(repeat_count - 1):
         buffer.append(buffer[-1])
 
 def rle_decode(data):
